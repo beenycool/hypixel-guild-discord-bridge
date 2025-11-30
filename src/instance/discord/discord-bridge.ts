@@ -12,6 +12,7 @@ import type {
   ChatEvent,
   CommandEvent,
   CommandFeedbackEvent,
+  CommandImageEvent,
   GuildGeneralEvent,
   GuildPlayerEvent,
   InstanceMessage,
@@ -341,6 +342,19 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
 
   async onCommandFeedback(event: CommandFeedbackEvent): Promise<void> {
     await this.sendCommandResponse(event, true)
+  }
+
+  async onCommandImage(event: CommandImageEvent): Promise<void> {
+    const replyIds = this.messageAssociation.getMessageId(event.originEventId)
+    // Convert Uint8Array back to Buffer for Discord.js compatibility
+    const imageBuffer = Buffer.from(event.imageBuffer)
+    for (const replyId of replyIds) {
+      try {
+        await this.sendImageToChannels(event.eventId, [replyId.channelId], imageBuffer)
+      } catch (error: unknown) {
+        this.logger.error(error, 'can not send command image')
+      }
+    }
   }
 
   private lastInstanceEvent = new Map<InstanceMessageType, number>()

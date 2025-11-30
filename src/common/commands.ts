@@ -14,6 +14,17 @@ import type EventHelper from './event-helper.js'
 import type UnexpectedErrorHandler from './unexpected-error-handler.js'
 import type { DiscordUser } from './user'
 
+/**
+ * Result from a chat command handler
+ * Can be a simple string message, or a response with both text and an image
+ */
+export interface ChatCommandResponse {
+  message: string
+  imageBuffer?: Buffer
+}
+
+export type ChatCommandResult = string | ChatCommandResponse
+
 export abstract class ChatCommandHandler {
   public readonly triggers: string[]
   public readonly description: string
@@ -29,7 +40,7 @@ export abstract class ChatCommandHandler {
     return `Example: ${commandPrefix}${this.example}`
   }
 
-  public abstract handler(context: ChatCommandContext): Promise<string> | string
+  public abstract handler(context: ChatCommandContext): Promise<ChatCommandResult> | ChatCommandResult
 }
 
 export interface ChatCommandContext {
@@ -47,6 +58,7 @@ export interface ChatCommandContext {
   args: string[]
 
   sendFeedback: (feedback: string) => void
+  sendImage: (image: Buffer, message?: string) => void
 }
 
 export interface DiscordCommandHandler {

@@ -28,7 +28,7 @@ export default class Unlink extends ChatCommandHandler {
     const uuid = context.message.user.mojangProfile().id
 
     if (this.confirmationId.get<string>(givenId) === uuid) {
-      const count = context.app.core.verification.invalidate({ uuid: uuid })
+      const count = await context.app.core.verification.invalidate({ uuid: uuid })
       return count > 0 ? `${context.username}, Successfully unlinked!` : `${context.username}, Nothing to Unlink!`
     } else {
       const userLink = await context.app.core.verification.findByIngame(uuid)

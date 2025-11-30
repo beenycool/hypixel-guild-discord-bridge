@@ -53,6 +53,11 @@ export interface ApplicationEvents {
    */
   commandFeedback: (event: Readonly<CommandFeedbackEvent>) => void
   /**
+   * Command sending an image response.
+   * Used for commands that generate images (like item/armor rendering).
+   */
+  commandImage: (event: Readonly<CommandImageEvent>) => void
+  /**
    * When a plugin or a component wishes to broadcast a message to all instances.
    */
   broadcast: (event: Readonly<BroadcastEvent>) => void
@@ -635,6 +640,33 @@ export type CommandEvent = CommandLike
  * Can be used to send multiple responses as well.
  */
 export type CommandFeedbackEvent = CommandLike
+
+/**
+ * Used when a command sends an image response.
+ */
+export interface CommandImageEvent extends InformEvent, ReplyEvent {
+  /**
+   * The channel type the message is coming from
+   * @see ChannelType
+   */
+  readonly channelType: ChannelType
+  /**
+   * The user who executed the command
+   */
+  readonly user: User
+  /**
+   * The command name that has been executed
+   */
+  readonly commandName: string
+  /**
+   * The image buffer to send (Uint8Array for serialization compatibility over IPC/websockets)
+   */
+  readonly imageBuffer: Uint8Array
+  /**
+   * Optional message to accompany the image
+   */
+  readonly message?: string
+}
 
 export interface UserLink {
   uuid: string

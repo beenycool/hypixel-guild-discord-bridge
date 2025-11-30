@@ -1,7 +1,7 @@
 import type Application from '../../application.js'
 import type { ChatEvent, CommandLike } from '../../common/application-event.js'
 import { InstanceType, Permission } from '../../common/application-event.js'
-import type { ChatCommandHandler } from '../../common/commands.js'
+import type { ChatCommandHandler, ChatCommandResult } from '../../common/commands.js'
 import { ConnectableInstance, Status } from '../../common/connectable-instance.js'
 import { InternalInstancePrefix } from '../../common/instance.js'
 
@@ -65,9 +65,41 @@ import Timecharms from './triggers/timecharms.js'
 import Toggle from './triggers/toggle.js'
 import Toggled from './triggers/toggled.js'
 import Unlink from './triggers/unlink.js'
+import Urchin from './triggers/urchin.js'
 import Vengeance from './triggers/vengeance.js'
 import Warp from './triggers/warp.js'
 import Weight from './triggers/weight.js'
+import Accessories from './triggers/accessories.js'
+import AuctionHouse from './triggers/auction-house.js'
+import Chicken from './triggers/chicken.js'
+import CrimsonIsle from './triggers/crimson-isle.js'
+import Dinosaur from './triggers/dinosaur.js'
+import Dojo from './triggers/dojo.js'
+import Duck from './triggers/duck.js'
+import Duels from './triggers/duels.js'
+import Essence from './triggers/essence.js'
+import FairySouls from './triggers/fairy-souls.js'
+import Forge from './triggers/forge.js'
+import Garden from './triggers/garden.js'
+import GuildExperience from './triggers/guild-experience.js'
+import Jacob from './triggers/jacob.js'
+import Kitty from './triggers/kitty.js'
+import Megawalls from './triggers/megawalls.js'
+import Picket from './triggers/picket.js'
+import Player from './triggers/player.js'
+import QuickMaths from './triggers/quick-maths.js'
+import Rabbit from './triggers/rabbit.js'
+import Raccoon from './triggers/raccoon.js'
+import Skyblock from './triggers/skyblock.js'
+import TrophyFish from './triggers/trophy-fish.js'
+import UHC from './triggers/uhc.js'
+import Unscramble from './triggers/unscramble.js'
+import Warpout from './triggers/warpout.js'
+import Woolwars from './triggers/woolwars.js'
+import Armor from './triggers/armor.js'
+import Equipment from './triggers/equipment.js'
+import Pet from './triggers/pet.js'
+import RenderItem from './triggers/render-item.js'
 
 export class CommandsInstance extends ConnectableInstance<InstanceType.Commands> {
   public readonly commands: ChatCommandHandler[]
@@ -136,9 +168,41 @@ export class CommandsInstance extends ConnectableInstance<InstanceType.Commands>
       new Toggle(),
       new Toggled(),
       new Unlink(),
+      new Urchin(),
       new Vengeance(),
       new Warp(),
-      new Weight()
+      new Weight(),
+      new Accessories(),
+      new AuctionHouse(),
+      new Chicken(),
+      new CrimsonIsle(),
+      new Dinosaur(),
+      new Dojo(),
+      new Duck(),
+      new Duels(),
+      new Essence(),
+      new FairySouls(),
+      new Forge(),
+      new Garden(),
+      new GuildExperience(),
+      new Jacob(),
+      new Kitty(),
+      new Megawalls(),
+      new Picket(),
+      new Player(),
+      new QuickMaths(),
+      new Rabbit(),
+      new Raccoon(),
+      new Skyblock(),
+      new TrophyFish(),
+      new UHC(),
+      new Unscramble(),
+      new Warpout(),
+      new Woolwars(),
+      new Armor(),
+      new Equipment(),
+      new Pet(),
+      new RenderItem()
     ]
 
     this.checkCommandsIntegrity()
@@ -210,10 +274,13 @@ export class CommandsInstance extends ConnectableInstance<InstanceType.Commands>
 
         sendFeedback: (feedbackResponse) => {
           this.feedback(event, command.triggers[0], feedbackResponse)
+        },
+        sendImage: (image, message) => {
+          this.sendImage(event, command.triggers[0], image, message)
         }
       })
 
-      this.reply(event, command.triggers[0], commandResponse)
+      this.processCommandResponse(event, command.triggers[0], commandResponse)
     } catch (error) {
       this.logger.error('Error while handling command', error)
       this.reply(
@@ -224,12 +291,40 @@ export class CommandsInstance extends ConnectableInstance<InstanceType.Commands>
     }
   }
 
+  private processCommandResponse(event: ChatEvent, commandName: string, response: ChatCommandResult): void {
+    if (typeof response === 'string') {
+      this.reply(event, commandName, response)
+    } else {
+      // Response is ChatCommandResponse with message and optional imageBuffer
+      this.reply(event, commandName, response.message)
+      if (response.imageBuffer) {
+        this.sendImage(event, commandName, response.imageBuffer)
+      }
+    }
+  }
+
   private reply(event: ChatEvent, commandName: string, response: string): void {
     this.application.emit('command', this.format(event, commandName, response))
   }
 
   private feedback(event: ChatEvent, commandName: string, response: string): void {
     this.application.emit('commandFeedback', this.format(event, commandName, response))
+  }
+
+  private sendImage(event: ChatEvent, commandName: string, image: Buffer, message?: string): void {
+    // Convert Buffer to Uint8Array for serialization compatibility over IPC/websockets
+    const imageBuffer = new Uint8Array(image)
+    this.application.emit('commandImage', {
+      eventId: this.eventHelper.generate(),
+      instanceName: event.instanceName,
+      instanceType: event.instanceType,
+      channelType: event.channelType,
+      originEventId: event.eventId,
+      user: event.user,
+      commandName: commandName,
+      imageBuffer: imageBuffer,
+      message: message
+    })
   }
 
   private format(event: ChatEvent, commandName: string, response: string): CommandLike {

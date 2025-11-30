@@ -1,55 +1,68 @@
-import type { SqliteManager } from '../../common/sqlite-manager'
+import type { PostgresManager } from '../../common/postgres-manager.js'
 
 export class DiscordLeaderboards {
-  constructor(private readonly sqliteManager: SqliteManager) {}
+  constructor(private readonly postgresManager: PostgresManager) {}
 
-  public getAll(): LeaderboardEntry[] {
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare('SELECT * FROM "discordLeaderboards"')
-
-    const entries = select.all() as LeaderboardEntry[]
-    for (const entry of entries) {
-      entry.guildId = entry.guildId ?? undefined // convert null to undefined
-      entry.updatedAt = entry.updatedAt * 1000
-      entry.createdAt = entry.createdAt * 1000
-    }
-
-    return entries
-  }
-
-  public addOrSet(entry: LeaderboardEntry): void {
-    const database = this.sqliteManager.getDatabase()
-    const insert = database.prepare(
-      'INSERT OR REPLACE INTO "discordLeaderboards" (messageId, type,channelId, guildId) VALUES (?, ?, ?, ?)'
+  public async getAll(): Promise<LeaderboardEntry[]> {
+    const entries = await this.postgresManager.query<LeaderboardEntryRow>(
+      'SELECT * FROM "discordLeaderboards"'
     )
-    insert.run(entry.messageId, entry.type, entry.channelId, entry.guildId)
+
+    return entries.map((entry) => ({
+      messageId: entry.messageId,
+      type: entry.type as LeaderboardEntry['type'],
+      channelId: entry.channelId,
+      guildId: entry.guildId ?? undefined,
+      updatedAt: Number(entry.updatedAt) * 1000,
+      createdAt: Number(entry.createdAt) * 1000
+    }))
   }
 
-  public updateTime(entries: { messageId: string; updatedAt: number }[]): void {
-    const database = this.sqliteManager.getDatabase()
-    database.transaction(() => {
-      const update = database.prepare('UPDATE "discordLeaderboards" SET updatedAt = ? WHERE messageId = ?')
+  public async addOrSet(entry: LeaderboardEntry): Promise<void> {
+    await this.postgresManager.execute(
+      `INSERT INTO "discordLeaderboards" ("messageId", type, "channelId", "guildId")
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT ("messageId") DO UPDATE SET
+         type = EXCLUDED.type,
+         "channelId" = EXCLUDED."channelId",
+         "guildId" = EXCLUDED."guildId"`,
+      [entry.messageId, entry.type, entry.channelId, entry.guildId ?? null]
+    )
+  }
+
+  public async updateTime(entries: { messageId: string; updatedAt: number }[]): Promise<void> {
+    await this.postgresManager.withTransaction(async (client) => {
       for (const entry of entries) {
-        update.run(Math.floor(entry.updatedAt / 1000), entry.messageId)
+        await client.query(
+          'UPDATE "discordLeaderboards" SET "updatedAt" = $1 WHERE "messageId" = $2',
+          [Math.floor(entry.updatedAt / 1000), entry.messageId]
+        )
       }
-    })()
+    })
   }
 
-  public remove(messagesIds: string[]): number {
-    const database = this.sqliteManager.getDatabase()
-    const transaction = database.transaction(() => {
-      const update = database.prepare('DELETE FROM "discordLeaderboards" WHERE messageId = ?')
-
+  public async remove(messagesIds: string[]): Promise<number> {
+    return await this.postgresManager.withTransaction(async (client) => {
       let count = 0
-      for (const entry of messagesIds) {
-        count += update.run(entry).changes
+      for (const messageId of messagesIds) {
+        const result = await client.query(
+          'DELETE FROM "discordLeaderboards" WHERE "messageId" = $1',
+          [messageId]
+        )
+        count += result.rowCount ?? 0
       }
-
       return count
     })
-
-    return transaction()
   }
+}
+
+interface LeaderboardEntryRow {
+  messageId: string
+  type: string
+  channelId: string
+  guildId: string | null
+  updatedAt: string | number
+  createdAt: string | number
 }
 
 export interface LeaderboardEntry {

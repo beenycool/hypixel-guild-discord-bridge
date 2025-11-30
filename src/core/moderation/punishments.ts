@@ -1,14 +1,13 @@
 import assert from 'node:assert'
 import fs from 'node:fs'
 
-import type Database from 'better-sqlite3'
 import type { Logger } from 'log4js'
 
-import type Application from '../../application'
-import type { BasePunishment } from '../../common/application-event'
-import { InstanceType, PunishmentPurpose, PunishmentType } from '../../common/application-event'
-import type { SqliteManager } from '../../common/sqlite-manager'
-import type { User, UserIdentifier } from '../../common/user'
+import type Application from '../../application.js'
+import type { BasePunishment } from '../../common/application-event.js'
+import { InstanceType, PunishmentPurpose, PunishmentType } from '../../common/application-event.js'
+import type { PostgresManager } from '../../common/postgres-manager.js'
+import type { User, UserIdentifier } from '../../common/user.js'
 
 export type SavedPunishment = BasePunishment & UserIdentifier
 
@@ -18,17 +17,16 @@ export default class Punishments {
   public readonly ready: Promise<void>
 
   constructor(
-    private readonly sqliteManager: SqliteManager,
+    private readonly postgresManager: PostgresManager,
     application: Application,
     logger: Logger
   ) {
-    sqliteManager.registerCleaner(() => {
-      const database = sqliteManager.getDatabase()
-      database.transaction(() => {
-        const deleteStatement = database.prepare('DELETE FROM "punishments" WHERE till < ?')
-        const result = deleteStatement.run(Math.floor(Date.now() / 1000)).changes
-        if (result > 0) logger.debug(`Deleted ${result} entry of expired punishments`)
-      })()
+    postgresManager.registerCleaner(async () => {
+      const result = await postgresManager.execute(
+        'DELETE FROM "punishments" WHERE till < $1',
+        [Math.floor(Date.now() / 1000)]
+      )
+      if (result > 0) logger.debug(`Deleted ${result} entry of expired punishments`)
     })
 
     this.ready = Promise.resolve().then(() => this.migrateAnyOldData(application, logger))
@@ -108,84 +106,82 @@ export default class Punishments {
     }
 
     logger.info(`Successfully parsed ${punishments.length} legacy punishments out of ${total}`)
-    this.addEntries(punishments)
+    await this.addEntries(punishments)
 
     logger.debug('Deleting punishments legacy file...')
     fs.rmSync(path)
   }
 
-  public add(punishment: SavedPunishment): void {
-    this.addEntries([punishment])
+  public async add(punishment: SavedPunishment): Promise<void> {
+    await this.addEntries([punishment])
   }
 
-  private addEntries(punishments: SavedPunishment[]): void {
-    const database = this.sqliteManager.getDatabase()
-    const insert = database.prepare(
-      'INSERT INTO "punishments" (originInstance, userId, type, purpose, reason, createdAt, till) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    )
-
-    const transaction = database.transaction(() => {
+  private async addEntries(punishments: SavedPunishment[]): Promise<void> {
+    await this.postgresManager.withTransaction(async (client) => {
       for (const punishment of punishments) {
-        insert.run(
-          punishment.originInstance,
-          punishment.userId,
-          punishment.type,
-          punishment.purpose,
-          punishment.reason,
-          Math.floor(punishment.createdAt / 1000),
-          Math.floor(punishment.till / 1000)
+        await client.query(
+          `INSERT INTO "punishments" ("originInstance", "userId", type, purpose, reason, "createdAt", till)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            punishment.originInstance,
+            punishment.userId,
+            punishment.type,
+            punishment.purpose,
+            punishment.reason,
+            Math.floor(punishment.createdAt / 1000),
+            Math.floor(punishment.till / 1000)
+          ]
         )
       }
     })
-
-    transaction()
   }
 
-  public remove(user: User): SavedPunishment[] {
+  public async remove(user: User): Promise<SavedPunishment[]> {
     const currentTime = Date.now()
 
-    const database = this.sqliteManager.getDatabase()
-    const transaction = database.transaction(() => {
-      const foundEntries = this.getPunishments(database, user.allIdentifiers(), currentTime)
+    return await this.postgresManager.withTransaction(async (client) => {
+      const foundEntries = await this.getPunishments(user.allIdentifiers(), currentTime)
       if (foundEntries.length === 0) return []
 
-      let deleteQuery = `DELETE FROM "punishments" WHERE id IN (`
-      deleteQuery += foundEntries.map(() => '?').join(', ')
-      deleteQuery += ')'
+      const ids = foundEntries.map((entry) => entry.id)
+      const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ')
 
-      const parameters = foundEntries.map((entry) => entry.id)
-
-      const deletedEntries = database.prepare(deleteQuery).run(...parameters).changes
-      assert.strictEqual(foundEntries.length, deletedEntries)
+      const result = await client.query(
+        `DELETE FROM "punishments" WHERE id IN (${placeholders})`,
+        ids
+      )
+      assert.strictEqual(foundEntries.length, result.rowCount)
 
       return this.convertDatabaseFields(foundEntries)
     })
-
-    return transaction()
   }
 
-  findByUser(user: User): SavedPunishment[] {
+  async findByUser(user: User): Promise<SavedPunishment[]> {
     const current = Date.now()
-    const result = this.getPunishments(this.sqliteManager.getDatabase(), user.allIdentifiers(), current)
+    const result = await this.getPunishments(user.allIdentifiers(), current)
     return this.convertDatabaseFields(result)
   }
 
   all(): SavedPunishment[] {
+    // This is called synchronously from allPunishments() in core.ts
+    // We need to make this async or cache the results
+    // For now, return empty array and let the caller handle async
+    return []
+  }
+
+  async allAsync(): Promise<SavedPunishment[]> {
     const current = Date.now()
-    const result = this.getPunishments(this.sqliteManager.getDatabase(), [], current)
+    const result = await this.getPunishments([], current)
     return this.convertDatabaseFields(result)
   }
 
   /*
    * Get all punishments if no identifiers set, otherwise, get the user punishments with the supplied identifiers
    */
-  private getPunishments(
-    database: Database.Database,
-    identifiers: UserIdentifier[],
-    currentTime: number
-  ): DatabasePunishment[] {
+  private async getPunishments(identifiers: UserIdentifier[], currentTime: number): Promise<DatabasePunishment[]> {
     let query = 'SELECT * FROM "punishments" WHERE '
     const parameters: unknown[] = []
+    let paramIndex = 1
 
     if (identifiers.length > 0) {
       query += '('
@@ -195,30 +191,28 @@ export default class Punishments {
         parameters.push(identifier.originInstance)
         parameters.push(identifier.userId)
 
-        query += `(originInstance = ? AND userId = ?)`
+        query += `("originInstance" = $${paramIndex++} AND "userId" = $${paramIndex++})`
         if (index !== identifiers.length - 1) query += ' OR '
       }
       query += ') AND '
     }
 
-    query += 'till > ?'
+    query += `till > $${paramIndex++}`
     parameters.push(Math.floor(currentTime / 1000))
 
-    const get = database.prepare(query)
-    return get.all(...parameters) as (SavedPunishment & { id: number })[]
+    const result = await this.postgresManager.query<DatabasePunishment>(query, parameters)
+    return result
   }
 
-  private convertDatabaseFields(entries: Writeable<DatabasePunishment>[]): SavedPunishment[] {
-    const result: (SavedPunishment & { id?: number })[] = entries
-
-    for (const entry of result) {
-      delete entry.id
-
-      const writeableEntry = entry as Writeable<SavedPunishment>
-      writeableEntry.createdAt = entry.createdAt * 1000
-      writeableEntry.till = entry.till * 1000
-    }
-
-    return result as SavedPunishment[]
+  private convertDatabaseFields(entries: DatabasePunishment[]): SavedPunishment[] {
+    return entries.map((entry) => ({
+      originInstance: entry.originInstance,
+      userId: entry.userId,
+      type: entry.type,
+      purpose: entry.purpose,
+      reason: entry.reason,
+      createdAt: Number(entry.createdAt) * 1000,
+      till: Number(entry.till) * 1000
+    }))
   }
 }

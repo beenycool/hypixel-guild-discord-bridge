@@ -34,12 +34,12 @@ declare module 'hypixel-api-reborn' {
 
   export interface SkyblockV2Member {
     leveling?: { experience: number }
-    currencies?: { coin_purse?: number }
+    currencies?: { coin_purse?: number; essence?: Record<string, { current?: number }> }
     dungeons: SkyblockV2Dungeons | undefined
     rift?: SkyblockV2Rift
     accessory_bag_storage?: {
       selected_power?: string
-      highest_magical_power: number
+      highest_magical_power?: number
       tuning: { slot_0?: Record<string, number> }
     }
     collection?: Record<string, number>
@@ -47,7 +47,12 @@ declare module 'hypixel-api-reborn' {
       kills: Record<string, number> & { last_killed_mob: string }
       milestone?: { last_claimed_milestone?: number }
     }
-    inventory?: { bag_contents?: { talisman_bag: SkyblockV2Inventory } }
+    inventory?: {
+      bag_contents?: { talisman_bag: SkyblockV2Inventory }
+      inv_armor?: SkyblockV2Inventory
+      inv_contents?: SkyblockV2Inventory
+      equipment_contents?: SkyblockV2Inventory
+    }
     profile: { bank_account?: number }
     player_data: { experience?: Record<string, number> }
     nether_island_player_data?: {
@@ -62,12 +67,40 @@ declare module 'hypixel-api-reborn' {
         fiery?: number
         infernal?: number
       }
+      dojo?: {
+        dojo_points_mob_kb?: number
+        dojo_points_wall_jump?: number
+        dojo_points_archer?: number
+        dojo_points_sword_swap?: number
+        dojo_points_snake?: number
+        dojo_points_lock_head?: number
+        dojo_points_fireball?: number
+      }
     }
     slayer: SlayerProfile | undefined
-    jacobs_contest?: Partial<{ perks: { farming_level_cap: number } }>
+    jacobs_contest?: {
+      medals_inv?: { bronze?: number; silver?: number; gold?: number }
+      perks?: { double_drops?: number; farming_level_cap?: number; personal_bests?: boolean }
+      contests?: Record<string, { collected?: number }>
+    }
     events?: SkyblockPlayerEvents
-    pets_data?: Partial<{ pet_care: { pet_types_sacrificed?: string[] } }>
+    pets_data?: {
+      pet_care?: { pet_types_sacrificed?: string[] }
+      pets?: Array<{
+        type?: string
+        tier?: string
+        exp?: number
+        active?: boolean
+        heldItem?: string
+        candyUsed?: number
+        skin?: string
+        level?: number
+      }>
+    }
     essence?: SkyblockV2Essence
+    fairy_soul?: { total_collected?: number; fairy_exchanges?: number }
+    mining_core?: { nodes?: { forge_processes?: Record<string, Record<string, unknown>> } }
+    trophy_fish?: Record<string, number | object> & { total_caught?: number; rewards?: unknown; last_caught?: unknown }
   }
 
   export interface SkyblockV2Inventory {

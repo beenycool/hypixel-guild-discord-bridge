@@ -1,25 +1,32 @@
-import type { SqliteManager } from '../../common/sqlite-manager'
+import type { PostgresManager } from '../../common/postgres-manager.js'
 
 export class MinecraftAccounts {
-  constructor(private readonly sqliteManager: SqliteManager) {}
+  constructor(private readonly postgresManager: PostgresManager) {}
 
-  public set(uuid: string, options: GameToggleConfig): void {
-    const database = this.sqliteManager.getDatabase()
-
-    const insert = database.prepare('INSERT OR REPLACE INTO "mojangProfileSettings" VALUES (?, ?, ?, ?, ?)')
-    insert.run(
-      uuid,
-      options.playerOnlineStatusEnabled ? 1 : 0,
-      options.guildAllEnabled ? 1 : 0,
-      options.guildChatEnabled ? 1 : 0,
-      options.guildNotificationsEnabled ? 1 : 0
+  public async set(uuid: string, options: GameToggleConfig): Promise<void> {
+    await this.postgresManager.execute(
+      `INSERT INTO "mojangProfileSettings" (id, "playerOnlineStatusEnabled", "guildAllEnabled", "guildChatEnabled", "guildNotificationsEnabled")
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO UPDATE SET
+         "playerOnlineStatusEnabled" = EXCLUDED."playerOnlineStatusEnabled",
+         "guildAllEnabled" = EXCLUDED."guildAllEnabled",
+         "guildChatEnabled" = EXCLUDED."guildChatEnabled",
+         "guildNotificationsEnabled" = EXCLUDED."guildNotificationsEnabled"`,
+      [
+        uuid,
+        options.playerOnlineStatusEnabled ? 1 : 0,
+        options.guildAllEnabled ? 1 : 0,
+        options.guildChatEnabled ? 1 : 0,
+        options.guildNotificationsEnabled ? 1 : 0
+      ]
     )
   }
 
-  public get(uuid: string): GameToggleConfig {
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare('SELECT * FROM "mojangProfileSettings" WHERE id = ?')
-    const result = select.get(uuid) as Record<keyof GameToggleConfig, number> | undefined
+  public async get(uuid: string): Promise<GameToggleConfig> {
+    const result = await this.postgresManager.queryOne<Record<keyof GameToggleConfig, number>>(
+      'SELECT * FROM "mojangProfileSettings" WHERE id = $1',
+      [uuid]
+    )
 
     return {
       playerOnlineStatusEnabled: !!result?.playerOnlineStatusEnabled,

@@ -92,7 +92,7 @@ async function handleUnlinkMinecraft(context: Readonly<DiscordCommandContext>) {
     return
   }
 
-  const count = context.application.core.verification.invalidate({ uuid: mojangProfile.id })
+  const count = await context.application.core.verification.invalidate({ uuid: mojangProfile.id })
   await (count > 0 ? interaction.editReply('Successfully unlinked!') : interaction.editReply('Nothing to unlink!'))
 }
 
@@ -101,7 +101,7 @@ async function handleUnlinkDiscord(context: Readonly<DiscordCommandContext>) {
   await interaction.deferReply()
 
   const user = interaction.options.getUser('user', true)
-  const count = context.application.core.verification.invalidate({ discordId: user.id })
+  const count = await context.application.core.verification.invalidate({ discordId: user.id })
   await (count > 0 ? interaction.editReply('Successfully unlinked!') : interaction.editReply('Nothing to unlink!'))
 }
 

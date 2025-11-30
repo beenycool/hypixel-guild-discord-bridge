@@ -7,6 +7,11 @@ import * as t from "ts-interface-checker";
 export const GeneralConfig = t.iface([], {
   "hypixelApiKey": "string",
   "shareMetrics": "boolean",
+  "urchinApiKey": t.opt("string"),
+});
+
+export const DatabaseConfig = t.iface([], {
+  "connectionString": "string",
 });
 
 export const StaticDiscordConfig = t.iface([], {
@@ -21,14 +26,16 @@ export const PrometheusConfig = t.iface([], {
 });
 
 export const ApplicationConfig = t.iface([], {
-  "version": t.lit(2),
+  "version": t.lit(3),
   "general": "GeneralConfig",
+  "database": "DatabaseConfig",
   "discord": "StaticDiscordConfig",
   "prometheus": "PrometheusConfig",
 });
 
 const exportedTypeSuite: t.ITypeSuite = {
   GeneralConfig,
+  DatabaseConfig,
   StaticDiscordConfig,
   PrometheusConfig,
   ApplicationConfig,

@@ -8,6 +8,7 @@ import type {
   ChatEvent,
   CommandEvent,
   CommandFeedbackEvent,
+  CommandImageEvent,
   GuildGeneralEvent,
   GuildPlayerEvent,
   InstanceStatusEvent,
@@ -50,6 +51,11 @@ export default abstract class Bridge<K extends Instance<InstanceType>> {
         .add(() => Promise.resolve(this.onCommandFeedback(event)))
         .catch(this.errorHandler.promiseCatch('handling command feedback'))
     })
+    this.application.on('commandImage', (event) => {
+      void this.queue
+        .add(() => Promise.resolve(this.onCommandImage(event)))
+        .catch(this.errorHandler.promiseCatch('handling command image'))
+    })
 
     this.application.on('chat', (event) => {
       void this.queue
@@ -87,6 +93,8 @@ export default abstract class Bridge<K extends Instance<InstanceType>> {
   protected abstract onCommand(event: CommandEvent): void | Promise<void>
 
   protected abstract onCommandFeedback(event: CommandFeedbackEvent): void | Promise<void>
+
+  protected abstract onCommandImage(event: CommandImageEvent): void | Promise<void>
 
   protected abstract onChat(event: ChatEvent): void | Promise<void>
 

@@ -3,15 +3,15 @@ import assert from 'node:assert'
 import type { Logger } from 'log4js'
 import PromiseQueue from 'promise-queue'
 
-import type Application from '../../application'
-import { ChannelType, InstanceType } from '../../common/application-event'
-import { Status } from '../../common/connectable-instance'
-import type EventHelper from '../../common/event-helper'
-import type { SqliteManager } from '../../common/sqlite-manager'
-import SubInstance from '../../common/sub-instance'
-import type UnexpectedErrorHandler from '../../common/unexpected-error-handler'
-import Duration from '../../utility/duration'
-import type { Core } from '../core'
+import type Application from '../../application.js'
+import { ChannelType, InstanceType } from '../../common/application-event.js'
+import { Status } from '../../common/connectable-instance.js'
+import type EventHelper from '../../common/event-helper.js'
+import type { PostgresManager } from '../../common/postgres-manager.js'
+import SubInstance from '../../common/sub-instance.js'
+import type UnexpectedErrorHandler from '../../common/unexpected-error-handler.js'
+import Duration from '../../utility/duration.js'
+import type { Core } from '../core.js'
 
 export default class ScoresManager extends SubInstance<Core, InstanceType.Core, void> {
   public static readonly DeleteMembersOlderThan = Duration.years(3)
@@ -38,14 +38,14 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
     eventHelper: EventHelper<InstanceType.Core>,
     logger: Logger,
     errorHandler: UnexpectedErrorHandler,
-    sqliteManager: SqliteManager
+    postgresManager: PostgresManager
   ) {
     super(application, clientInstance, eventHelper, logger, errorHandler)
 
-    this.database = new ScoreDatabase(this, sqliteManager)
+    this.database = new ScoreDatabase(this, postgresManager)
 
     this.application.on('minecraftSelfBroadcast', (event) => {
-      this.database.addBotUuid(event.uuid)
+      void this.database.addBotUuid(event.uuid)
     })
 
     this.application.on('chat', (event) => {
@@ -53,11 +53,11 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
 
       switch (event.instanceType) {
         case InstanceType.Discord: {
-          this.database.addDiscordMessage(event.user.discordProfile().id, this.timestamp())
+          void this.database.addDiscordMessage(event.user.discordProfile().id, this.timestamp())
           break
         }
         case InstanceType.Minecraft: {
-          this.database.addMinecraftMessage(event.user.mojangProfile().id, this.timestamp())
+          void this.database.addMinecraftMessage(event.user.mojangProfile().id, this.timestamp())
         }
       }
     })
@@ -68,12 +68,12 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
       switch (event.instanceType) {
         case InstanceType.Discord: {
           const profile = event.user.discordProfile()
-          this.database.addDiscordCommand(profile.id, this.timestamp())
+          void this.database.addDiscordCommand(profile.id, this.timestamp())
           break
         }
         case InstanceType.Minecraft: {
           const profile = event.user.mojangProfile()
-          this.database.addMinecraftCommand(profile.id, this.timestamp())
+          void this.database.addMinecraftCommand(profile.id, this.timestamp())
         }
       }
     })
@@ -99,30 +99,30 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
     }, Duration.minutes(30).toMilliseconds())
   }
 
-  public getMessages30Days(): TotalMessagesLeaderboard[] {
+  public async getMessages30Days(): Promise<TotalMessagesLeaderboard[]> {
     const currentDate = Date.now()
-    const ignores = this.database.getBotUuids()
+    const ignores = await this.database.getBotUuids()
     return this.database.getGuildMessagesLeaderboard(ignores, currentDate - 30 * 24 * 60 * 60 * 1000, currentDate)
   }
 
-  public getMinecraftMessages30Days(limit: number): { top: MessagesLeaderboard[]; total: number } {
+  public async getMinecraftMessages30Days(limit: number): Promise<{ top: MessagesLeaderboard[]; total: number }> {
     const currentDate = Date.now()
-    const ignores = this.database.getBotUuids()
+    const ignores = await this.database.getBotUuids()
     return this.database.getMinecraftMessages(ignores, currentDate - 30 * 24 * 60 * 60 * 1000, currentDate, limit)
   }
 
-  public getDiscordMessages30Days(userIds: string[]): MessagesLeaderboard[] {
+  public async getDiscordMessages30Days(userIds: string[]): Promise<MessagesLeaderboard[]> {
     const currentDate = Date.now()
     return this.database.getDiscordMessages(userIds, currentDate - 30 * 24 * 60 * 60 * 1000, currentDate)
   }
 
-  public getOnline30Days(): MemberLeaderboard[] {
+  public async getOnline30Days(): Promise<MemberLeaderboard[]> {
     const currentDate = Date.now()
-    const ignores = this.database.getBotUuids()
+    const ignores = await this.database.getBotUuids()
     return this.database.getTime('OnlineMembers', ignores, currentDate - 30 * 24 * 60 * 60 * 1000, currentDate)
   }
 
-  public getPoints30Days(): ActivityTotalPoints[] {
+  public async getPoints30Days(): Promise<ActivityTotalPoints[]> {
     if (
       this.cachedPoints30Days !== undefined &&
       this.lastUpdatePoints30Days + ScoresManager.ScoresExpireAt.toMilliseconds() > Date.now()
@@ -131,8 +131,8 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
     }
 
     const currentDate = Date.now()
-    const points = this.database.getPoints(currentDate - Duration.days(30).toMilliseconds(), currentDate)
-    const leaderboard = this.normalizePoints(points)
+    const points = await this.database.getPoints(currentDate - Duration.days(30).toMilliseconds(), currentDate)
+    const leaderboard = await this.normalizePoints(points)
 
     this.cachedPoints30Days = leaderboard
     this.lastUpdatePoints30Days = Date.now()
@@ -140,7 +140,7 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
     return leaderboard
   }
 
-  public getPointsAlltime(): ActivityTotalPoints[] {
+  public async getPointsAlltime(): Promise<ActivityTotalPoints[]> {
     if (
       this.cachedPointsAlltime !== undefined &&
       this.lastUpdatePointsAlltime + ScoresManager.ScoresExpireAt.toMilliseconds() > Date.now()
@@ -148,8 +148,8 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
       return this.cachedPointsAlltime
     }
 
-    const points = this.database.getPoints(0, Date.now())
-    const leaderboard = this.normalizePoints(points)
+    const points = await this.database.getPoints(0, Date.now())
+    const leaderboard = await this.normalizePoints(points)
 
     this.cachedPointsAlltime = leaderboard
     this.lastUpdatePointsAlltime = Date.now()
@@ -157,15 +157,15 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
     return leaderboard
   }
 
-  private normalizePoints(points: Map<string, ActivityTotalPoints>): ActivityTotalPoints[] {
-    for (const minecraftBotUuid of this.database.getBotUuids()) {
+  private async normalizePoints(points: Map<string, ActivityTotalPoints>): Promise<ActivityTotalPoints[]> {
+    for (const minecraftBotUuid of await this.database.getBotUuids()) {
       points.delete(minecraftBotUuid)
     }
     for (const minecraftBot of this.application.minecraftManager.getMinecraftBots()) {
       points.delete(minecraftBot.uuid)
     }
 
-    const leaderboard = points.values().toArray()
+    const leaderboard = [...points.values()]
     for (const currentScore of leaderboard) {
       currentScore.total = Math.floor(currentScore.total)
     }
@@ -192,28 +192,28 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
         })
       }
       this.logger.trace(`Supplementing ${timeframes.length} guild members timeframe data for bot uuid ${botUuid}`)
-      this.database.addMembers(timeframes)
+      await this.database.addMembers(timeframes)
     }
   }
 
   private async fetchMembers(): Promise<void> {
     const instances = this.application.minecraftManager.getAllInstances()
     for (const bot of this.application.minecraftManager.getMinecraftBots()) {
-      this.database.addBotUuid(bot.uuid)
+      await this.database.addBotUuid(bot.uuid)
     }
 
     const tasks: Promise<unknown>[] = []
 
     for (const instance of instances) {
       const botUuid = instance.uuid()
-      if (botUuid !== undefined) this.database.addBotUuid(botUuid)
+      if (botUuid !== undefined) await this.database.addBotUuid(botUuid)
 
       if (instance.currentStatus() === Status.Connected) {
         const onlineTask = this.application.core.guildManager
           .list(instance.instanceName)
           .then((guild) => guild.members.filter((member) => member.online).map((member) => member.username))
           .then((usernames) => this.application.mojangApi.profilesByUsername(new Set(usernames)))
-          .then((profiles) => {
+          .then(async (profiles) => {
             const uuids = [...profiles.values()].filter((uuid) => uuid !== undefined)
             const currentTime = Date.now()
             const entries: Timeframe[] = uuids.map((uuid) => ({
@@ -222,7 +222,7 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
               toTimestamp: currentTime,
               leniencyMilliseconds: ScoresManager.LeniencyTime.toMilliseconds()
             }))
-            this.database.addOnlineMembers(entries)
+            await this.database.addOnlineMembers(entries)
           })
           .catch(this.errorHandler.promiseCatch('fetching and adding online members'))
 
@@ -230,7 +230,7 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
           .list(instance.instanceName)
           .then((guild) => guild.members.map((member) => member.username))
           .then((usernames) => this.application.mojangApi.profilesByUsername(new Set(usernames)))
-          .then((profiles) => {
+          .then(async (profiles) => {
             const uuids = [...profiles.values()].filter((uuid) => uuid !== undefined)
             const currentTime = Date.now()
             const entries: Timeframe[] = uuids.map((uuid) => ({
@@ -239,7 +239,7 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
               toTimestamp: currentTime,
               leniencyMilliseconds: ScoresManager.LeniencyTime.toMilliseconds()
             }))
-            this.database.addMembers(entries)
+            await this.database.addMembers(entries)
           })
           .catch(this.errorHandler.promiseCatch('fetching and adding all members'))
 
@@ -257,7 +257,7 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
      */
     const oldestTimestamp = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60
 
-    const usernames = this.database.getLegacyUsernames(oldestTimestamp)
+    const usernames = await this.database.getLegacyUsernames(oldestTimestamp)
     if (usernames.size === 0) return
     this.logger.debug(`Found ${usernames.size} legacy username that requires migration`)
 
@@ -272,7 +272,7 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
       this.logger.debug(`No Mojang information found for ${usernames.size - entries.length} username. Skipping those.`)
     }
 
-    const changedCount = this.database.migrateUsernameToUuid(oldestTimestamp, entries)
+    const changedCount = await this.database.migrateUsernameToUuid(oldestTimestamp, entries)
     if (changedCount > 0) {
       this.logger.debug(`Migrated ${changedCount} database entry from Mojang username to UUID`)
     }
@@ -288,281 +288,362 @@ export default class ScoresManager extends SubInstance<Core, InstanceType.Core, 
 class ScoreDatabase {
   constructor(
     private readonly scoresManager: ScoresManager,
-    private readonly sqliteManager: SqliteManager
+    private readonly postgresManager: PostgresManager
   ) {
-    sqliteManager.registerCleaner(() => this.clean())
+    postgresManager.registerCleaner(async () => {
+      await this.clean()
+    })
   }
 
-  public addMinecraftCommand(uuid: string, timestamp: number): void {
-    const database = this.sqliteManager.getDatabase()
-    const insert = database.prepare(
-      'INSERT INTO "MinecraftCommands" (timestamp, user, count) VALUES (@timestamp, @user, 1) ON CONFLICT DO UPDATE SET count = count + 1'
+  public async addMinecraftCommand(uuid: string, timestamp: number): Promise<void> {
+    const result = await this.postgresManager.execute(
+      `INSERT INTO "MinecraftCommands" (timestamp, "user", count)
+       VALUES ($1, $2, 1)
+       ON CONFLICT (timestamp, "user") DO UPDATE SET count = "MinecraftCommands".count + 1`,
+      [Math.floor(timestamp / 1000), uuid]
     )
-    const result = insert.run({ user: uuid, timestamp: Math.floor(timestamp / 1000) })
-    assert.ok(result.changes > 0, 'Nothing changed even when inserted?')
+    assert.ok(result > 0, 'Nothing changed even when inserted?')
   }
 
-  public addDiscordCommand(id: string, timestamp: number): void {
-    const database = this.sqliteManager.getDatabase()
-    const insert = database.prepare(
-      'INSERT INTO "DiscordCommands" (timestamp, user, count) VALUES (@timestamp, @user, 1) ON CONFLICT DO UPDATE SET count = count + 1'
+  public async addDiscordCommand(id: string, timestamp: number): Promise<void> {
+    const result = await this.postgresManager.execute(
+      `INSERT INTO "DiscordCommands" (timestamp, "user", count)
+       VALUES ($1, $2, 1)
+       ON CONFLICT (timestamp, "user") DO UPDATE SET count = "DiscordCommands".count + 1`,
+      [Math.floor(timestamp / 1000), id]
     )
-    const result = insert.run({ user: id, timestamp: Math.floor(timestamp / 1000) })
-    assert.ok(result.changes > 0, 'Nothing changed even when inserted?')
+    assert.ok(result > 0, 'Nothing changed even when inserted?')
   }
 
-  public addMinecraftMessage(uuid: string, timestamp: number): void {
-    const database = this.sqliteManager.getDatabase()
-    const insert = database.prepare(
-      'INSERT INTO "MinecraftMessages" (timestamp, user, count) VALUES (@timestamp, @user, 1) ON CONFLICT DO UPDATE SET count = count + 1'
+  public async addMinecraftMessage(uuid: string, timestamp: number): Promise<void> {
+    const result = await this.postgresManager.execute(
+      `INSERT INTO "MinecraftMessages" (timestamp, "user", count)
+       VALUES ($1, $2, 1)
+       ON CONFLICT (timestamp, "user") DO UPDATE SET count = "MinecraftMessages".count + 1`,
+      [Math.floor(timestamp / 1000), uuid]
     )
-    const result = insert.run({ user: uuid, timestamp: Math.floor(timestamp / 1000) })
-    assert.ok(result.changes > 0, 'Nothing changed even when inserted?')
+    assert.ok(result > 0, 'Nothing changed even when inserted?')
   }
 
-  public getMinecraftMessages(
+  public async getMinecraftMessages(
     ignore: string[],
     from: number,
     to: number,
     limit: number
-  ): {
+  ): Promise<{
     top: MessagesLeaderboard[]
     total: number
-  } {
-    let ignoreQuery = ''
-    if (ignore.length > 0) ignoreQuery = ` user NOT IN (` + ignore.map(() => '?').join(',') + ') AND'
-    const database = this.sqliteManager.getDatabase()
+  }> {
+    let ignoreClause = ''
+    const params: unknown[] = []
+    let paramIndex = 1
 
-    const select = database.prepare(
-      `SELECT user, total(count) as total FROM "MinecraftMessages" WHERE` +
-        ignoreQuery +
-        ` timestamp BETWEEN ? AND ? GROUP BY user ORDER BY total DESC LIMIT ?`
+    if (ignore.length > 0) {
+      const placeholders = ignore.map(() => `$${paramIndex++}`).join(',')
+      ignoreClause = `"user" NOT IN (${placeholders}) AND `
+      params.push(...ignore)
+    }
+
+    const fromParam = paramIndex++
+    const toParam = paramIndex++
+    const limitParam = paramIndex++
+    params.push(Math.floor(from / 1000), Math.floor(to / 1000))
+
+    const topResult = await this.postgresManager.query<{ user: string; total: string }>(
+      `SELECT "user", SUM(count) as total FROM "MinecraftMessages"
+       WHERE ${ignoreClause}timestamp BETWEEN $${fromParam} AND $${toParam}
+       GROUP BY "user" ORDER BY total DESC LIMIT $${limitParam}`,
+      [...params, limit]
     )
-    const total = database.prepare(
-      `SELECT total(count) as total FROM "MinecraftMessages" WHERE` + ignoreQuery + ` timestamp BETWEEN ? AND ?`
+
+    const totalResult = await this.postgresManager.queryOne<{ total: string }>(
+      `SELECT SUM(count) as total FROM "MinecraftMessages"
+       WHERE ${ignoreClause}timestamp BETWEEN $${fromParam} AND $${toParam}`,
+      params
     )
 
-    const parameters = [...ignore, Math.floor(from / 1000), Math.floor(to / 1000)]
-
-    const top = select.all(...parameters, limit) as MessagesLeaderboard[]
-    return { top: top, total: total.pluck(true).get(...parameters) as number }
+    return {
+      top: topResult.map((r) => ({ user: r.user, total: Number(r.total) })),
+      total: Number(totalResult?.total ?? 0)
+    }
   }
 
-  public getDiscordMessages(userIds: string[], from: number, to: number): MessagesLeaderboard[] {
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare(
-      `SELECT user, total(count) as total FROM "DiscordMessages" WHERE user IN (` +
-        userIds.map(() => '?').join(',') +
-        `) AND timestamp BETWEEN ? AND ? GROUP BY user ORDER BY total DESC`
+  public async getDiscordMessages(userIds: string[], from: number, to: number): Promise<MessagesLeaderboard[]> {
+    if (userIds.length === 0) return []
+
+    const placeholders = userIds.map((_, i) => `$${i + 1}`).join(',')
+    const fromParam = userIds.length + 1
+    const toParam = userIds.length + 2
+
+    const result = await this.postgresManager.query<{ user: string; total: string }>(
+      `SELECT "user", SUM(count) as total FROM "DiscordMessages"
+       WHERE "user" IN (${placeholders}) AND timestamp BETWEEN $${fromParam} AND $${toParam}
+       GROUP BY "user" ORDER BY total DESC`,
+      [...userIds, Math.floor(from / 1000), Math.floor(to / 1000)]
     )
-    return select.all(...userIds, Math.floor(from / 1000), Math.floor(to / 1000)) as MessagesLeaderboard[]
+
+    return result.map((r) => ({ user: r.user, total: Number(r.total) }))
   }
 
-  public getGuildMessagesLeaderboard(ignore: string[], from: number, to: number): TotalMessagesLeaderboard[] {
-    const database = this.sqliteManager.getDatabase()
+  public async getGuildMessagesLeaderboard(
+    ignore: string[],
+    from: number,
+    to: number
+  ): Promise<TotalMessagesLeaderboard[]> {
+    return await this.postgresManager.withTransaction(async (client) => {
+      let ignoreClause = ''
+      const params: unknown[] = []
+      let paramIndex = 1
 
-    const selectMinecraft = database.prepare(
-      `SELECT user as uuid, links.discordId, count FROM "MinecraftMessages" LEFT JOIN links ON (MinecraftMessages.user = links.uuid) WHERE MinecraftMessages.user NOT IN (${ignore.map(() => '?').join(',')}) AND timestamp BETWEEN ? AND ?`
-    )
-    const selectDiscord = database.prepare(
-      `SELECT user as discordId, links.uuid, count FROM "DiscordMessages" JOIN links ON (DiscordMessages.user = links.discordId) WHERE links.uuid NOT IN (${ignore.map(() => '?').join(',')}) AND timestamp BETWEEN ? AND ?`
-    )
+      if (ignore.length > 0) {
+        const placeholders = ignore.map(() => `$${paramIndex++}`).join(',')
+        ignoreClause = `"MinecraftMessages"."user" NOT IN (${placeholders}) AND `
+        params.push(...ignore)
+      }
 
-    const parameters = [ignore, Math.floor(from / 1000), Math.floor(to / 1000)]
+      const fromParam = paramIndex++
+      const toParam = paramIndex++
+      params.push(Math.floor(from / 1000), Math.floor(to / 1000))
 
-    const transaction = database.transaction(() => {
       interface DatabaseEntry {
         uuid: string
-        count: number
+        count: string
         discordId: string | null
       }
 
+      const minecraftResult = await client.query<DatabaseEntry>(
+        `SELECT "MinecraftMessages"."user" as uuid, links."discordId", count
+         FROM "MinecraftMessages"
+         LEFT JOIN links ON ("MinecraftMessages"."user" = links.uuid)
+         WHERE ${ignoreClause}timestamp BETWEEN $${fromParam} AND $${toParam}`,
+        params
+      )
+
+      // Reset params for discord query
+      params.length = 0
+      paramIndex = 1
+      if (ignore.length > 0) {
+        const placeholders = ignore.map(() => `$${paramIndex++}`).join(',')
+        ignoreClause = `links.uuid NOT IN (${placeholders}) AND `
+        params.push(...ignore)
+      } else {
+        ignoreClause = ''
+      }
+      const fromParam2 = paramIndex++
+      const toParam2 = paramIndex++
+      params.push(Math.floor(from / 1000), Math.floor(to / 1000))
+
+      const discordResult = await client.query<DatabaseEntry>(
+        `SELECT "DiscordMessages"."user" as "discordId", links.uuid, count
+         FROM "DiscordMessages"
+         JOIN links ON ("DiscordMessages"."user" = links."discordId")
+         WHERE ${ignoreClause}timestamp BETWEEN $${fromParam2} AND $${toParam2}`,
+        params
+      )
+
       const leaderboard = new Map<string, TotalMessagesLeaderboard>()
 
-      const minecraftResult = selectMinecraft.all(...parameters) as DatabaseEntry[]
-      const discordResult = selectDiscord.all(...parameters) as DatabaseEntry[]
-      for (const entry of [...minecraftResult, ...discordResult]) {
-        let object: TotalMessagesLeaderboard | undefined = leaderboard.get(entry.uuid)
+      for (const entry of [...minecraftResult.rows, ...discordResult.rows]) {
+        if (!entry.uuid) continue
+        let object = leaderboard.get(entry.uuid)
         if (object === undefined) {
           object = { uuid: entry.uuid, discordId: entry.discordId ?? undefined, count: 0 }
           leaderboard.set(entry.uuid, object)
         }
 
-        object.count += entry.count
+        object.count += Number(entry.count)
       }
 
       const resultLeaderboard = [...leaderboard.values()]
       resultLeaderboard.sort((a, b) => b.count - a.count)
       return resultLeaderboard
     })
-
-    return transaction()
   }
 
-  public getTime(
-    table: 'allMembers' | 'OnlineMembers',
+  public async getTime(
+    table: 'AllMembers' | 'OnlineMembers',
     ignore: string[],
     from: number,
     to: number
-  ): MemberLeaderboard[] {
+  ): Promise<MemberLeaderboard[]> {
     assert.ok(from < to, '"from" timestamp is earlier than the "to" timestamp')
 
-    let ignoreQuery = ''
-    if (ignore.length > 0)
-      ignoreQuery = ` ${table}.uuid NOT IN (` + ignore.map((parameter, index) => `@uuid${index}`).join(',') + ') AND'
-
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare(
-      `SELECT ${table}.uuid, links.discordId, total((min(@toTimestamp, toTimestamp) - max(@fromTimestamp, fromTimestamp))) as totalTime FROM "${table}"` +
-        ` LEFT JOIN links ON (${table}.uuid = links.uuid)` +
-        ' WHERE' +
-        ignoreQuery +
-        ' ((fromTimestamp BETWEEN @fromTimestamp AND @toTimestamp) OR (toTimestamp BETWEEN @fromTimestamp AND @toTimestamp))' +
-        ` GROUP BY ${table}.uuid ORDER BY totalTime DESC`
-    )
-
-    const parameters: Record<string, unknown> = {
+    let ignoreClause = ''
+    const params: Record<string, unknown> = {
       toTimestamp: Math.floor(to / 1000),
       fromTimestamp: Math.floor(from / 1000)
     }
-    for (const [index, element] of ignore.entries()) {
-      parameters[`uuid${index}`] = element
+
+    const paramValues: unknown[] = [Math.floor(from / 1000), Math.floor(to / 1000)]
+    let paramIndex = 3
+
+    if (ignore.length > 0) {
+      const placeholders = ignore.map((_, i) => `$${paramIndex + i}`).join(',')
+      ignoreClause = `"${table}".uuid NOT IN (${placeholders}) AND `
+      paramValues.push(...ignore)
     }
 
-    const leaderboard = select.all(parameters) as MemberLeaderboard[]
-    for (const entry of leaderboard) {
-      entry.discordId ??= undefined
-    }
-    return leaderboard
-  }
-
-  public addDiscordMessage(id: string, timestamp: number): void {
-    const database = this.sqliteManager.getDatabase()
-    const insert = database.prepare(
-      'INSERT INTO "DiscordMessages" (timestamp, user, count) VALUES (@timestamp, @user, 1) ON CONFLICT DO UPDATE SET count = count + 1'
+    const result = await this.postgresManager.query<{ uuid: string; discordId: string | null; totaltime: string }>(
+      `SELECT "${table}".uuid, links."discordId",
+              SUM(LEAST($2, "toTimestamp") - GREATEST($1, "fromTimestamp")) as totalTime
+       FROM "${table}"
+       LEFT JOIN links ON ("${table}".uuid = links.uuid)
+       WHERE ${ignoreClause}(("fromTimestamp" BETWEEN $1 AND $2) OR ("toTimestamp" BETWEEN $1 AND $2))
+       GROUP BY "${table}".uuid, links."discordId"
+       ORDER BY totalTime DESC`,
+      paramValues
     )
-    const result = insert.run({ user: id, timestamp: Math.floor(timestamp / 1000) })
-    assert.ok(result.changes > 0, 'Nothing changed even when inserted?')
+
+    return result.map((entry) => ({
+      uuid: entry.uuid,
+      discordId: entry.discordId ?? undefined,
+      totalTime: Number(entry.totaltime)
+    }))
   }
 
-  public addOnlineMembers(entries: Timeframe[]): void {
-    this.appendTimeframe('OnlineMembers', entries)
+  public async addDiscordMessage(id: string, timestamp: number): Promise<void> {
+    const result = await this.postgresManager.execute(
+      `INSERT INTO "DiscordMessages" (timestamp, "user", count)
+       VALUES ($1, $2, 1)
+       ON CONFLICT (timestamp, "user") DO UPDATE SET count = "DiscordMessages".count + 1`,
+      [Math.floor(timestamp / 1000), id]
+    )
+    assert.ok(result > 0, 'Nothing changed even when inserted?')
   }
 
-  public addMembers(entries: Timeframe[]): void {
-    this.appendTimeframe('AllMembers', entries)
+  public async addOnlineMembers(entries: Timeframe[]): Promise<void> {
+    await this.appendTimeframe('OnlineMembers', entries)
+  }
+
+  public async addMembers(entries: Timeframe[]): Promise<void> {
+    await this.appendTimeframe('AllMembers', entries)
   }
 
   /*
     Consolidate timeframes where from and to timestamps overlap (+ additional leniency when checking for overlapping)
    */
-  private appendTimeframe(tableName: string, entries: Timeframe[]): void {
-    const database = this.sqliteManager.getDatabase()
-    const getTimeframe = database.prepare(
-      `SELECT id, fromTimestamp, toTimestamp FROM "${tableName}" WHERE ` +
-        `uuid = @uuid` +
-        ` AND (` +
-        // check nearby timeframes with some leniency
-        ` (fromTimestamp > @toTimestamp AND fromTimestamp - @toTimestamp <= @leniency) OR ` +
-        ` (toTimestamp < @fromTimestamp AND @fromTimestamp - toTimestamp <= @leniency) OR ` +
-        // check overlapping timeframes
-        ` (fromTimestamp BETWEEN @fromTimestamp AND @toTimestamp) OR ` +
-        ` (toTimestamp BETWEEN @fromTimestamp AND @toTimestamp)` +
-        `)`
-    )
-    const deleteTimeframe = database.prepare(`DELETE FROM "${tableName}" WHERE id = ?`)
-    const insertTimeframe = database.prepare(
-      `INSERT INTO "${tableName}" (uuid, fromTimestamp, toTimestamp) VALUES (@uuid, @fromTimestamp, @toTimestamp)`
-    )
-
-    const transaction = database.transaction(() => {
+  private async appendTimeframe(tableName: string, entries: Timeframe[]): Promise<void> {
+    await this.postgresManager.withTransaction(async (client) => {
       for (const entry of entries) {
         const uuid = entry.uuid
         const fromTimestamp = Math.floor(entry.fromTimestamp / 1000)
         const toTimestamp = Math.floor(entry.toTimestamp / 1000)
         const leniencySeconds = Math.floor(entry.leniencyMilliseconds / 1000)
 
-        const existingFrames = getTimeframe.all({
-          uuid: uuid,
-          fromTimestamp: fromTimestamp,
-          toTimestamp: toTimestamp,
-          leniency: leniencySeconds
-        }) as { id: string; toTimestamp: number; fromTimestamp: number }[]
+        const existingFrames = await client.query<{ id: number; toTimestamp: string; fromTimestamp: string }>(
+          `SELECT id, "fromTimestamp", "toTimestamp" FROM "${tableName}" WHERE
+           uuid = $1
+           AND (
+             ("fromTimestamp" > $3 AND "fromTimestamp" - $3 <= $4) OR
+             ("toTimestamp" < $2 AND $2 - "toTimestamp" <= $4) OR
+             ("fromTimestamp" BETWEEN $2 AND $3) OR
+             ("toTimestamp" BETWEEN $2 AND $3)
+           )`,
+          [uuid, fromTimestamp, toTimestamp, leniencySeconds]
+        )
 
-        if (existingFrames.length > 0) {
-          for (const frame of existingFrames) {
-            deleteTimeframe.run(frame.id)
+        if (existingFrames.rows.length > 0) {
+          const ids = existingFrames.rows.map((f: { id: number }) => f.id)
+          const placeholders = ids.map((_: number, i: number) => `$${i + 1}`).join(',')
+          await client.query(`DELETE FROM "${tableName}" WHERE id IN (${placeholders})`, ids)
+
+          let lowestTime = Math.min(Number(existingFrames.rows[0].fromTimestamp), fromTimestamp)
+          let highestTime = Math.max(Number(existingFrames.rows[0].toTimestamp), toTimestamp)
+          for (const frame of existingFrames.rows) {
+            if (Number(frame.fromTimestamp) < lowestTime) lowestTime = Number(frame.fromTimestamp)
+            if (Number(frame.toTimestamp) > highestTime) highestTime = Number(frame.toTimestamp)
           }
 
-          let lowestTime = Math.min(existingFrames[0].fromTimestamp, fromTimestamp)
-          let highestTime = Math.max(existingFrames[0].toTimestamp, toTimestamp)
-          for (const frame of existingFrames) {
-            if (frame.fromTimestamp < lowestTime) lowestTime = frame.fromTimestamp
-            if (frame.toTimestamp > highestTime) highestTime = frame.toTimestamp
-          }
-
-          insertTimeframe.run({ uuid: uuid, fromTimestamp: lowestTime, toTimestamp: highestTime })
+          await client.query(
+            `INSERT INTO "${tableName}" (uuid, "fromTimestamp", "toTimestamp") VALUES ($1, $2, $3)`,
+            [uuid, lowestTime, highestTime]
+          )
         } else {
-          insertTimeframe.run({ uuid: uuid, fromTimestamp: fromTimestamp, toTimestamp: toTimestamp })
+          await client.query(
+            `INSERT INTO "${tableName}" (uuid, "fromTimestamp", "toTimestamp") VALUES ($1, $2, $3)`,
+            [uuid, fromTimestamp, toTimestamp]
+          )
         }
       }
     })
-
-    transaction()
   }
 
-  private getMessagesPoints(from: number, to: number): Map<string, ActivityPoint> {
-    const database = this.sqliteManager.getDatabase()
+  private async getMessagesPoints(from: number, to: number): Promise<Map<string, ActivityPoint>> {
+    return await this.postgresManager.withTransaction(async (client) => {
+      interface DatabaseCountEntry {
+        uuid: string
+        count: string
+        discordId: string | null
+        timestamp: string
+      }
 
-    const selectMinecraft = database.prepare(
-      `SELECT user as uuid, links.discordId, count, MinecraftMessages.timestamp FROM "MinecraftMessages" LEFT JOIN links ON (MinecraftMessages.user = links.uuid) WHERE timestamp BETWEEN ? AND ?`
-    )
-    const selectDiscord = database.prepare(
-      `SELECT user as discordId, links.uuid, count, DiscordMessages.timestamp FROM "DiscordMessages" JOIN links ON (DiscordMessages.user = links.discordId) WHERE timestamp BETWEEN ? AND ?`
-    )
+      const minecraftResult = await client.query<DatabaseCountEntry>(
+        `SELECT "MinecraftMessages"."user" as uuid, links."discordId", count, "MinecraftMessages".timestamp
+         FROM "MinecraftMessages"
+         LEFT JOIN links ON ("MinecraftMessages"."user" = links.uuid)
+         WHERE timestamp BETWEEN $1 AND $2`,
+        [Math.floor(from / 1000), Math.floor(to / 1000)]
+      )
 
-    const transaction = database.transaction(() => {
-      const minecraftResult = selectMinecraft.all(
-        Math.floor(from / 1000),
-        Math.floor(to / 1000)
-      ) as DatabaseCountEntry[]
-      const discordResult = selectDiscord.all(Math.floor(from / 1000), Math.floor(to / 1000)) as DatabaseCountEntry[]
-      const allEntries = [...minecraftResult, ...discordResult]
+      const discordResult = await client.query<DatabaseCountEntry>(
+        `SELECT "DiscordMessages"."user" as "discordId", links.uuid, count, "DiscordMessages".timestamp
+         FROM "DiscordMessages"
+         JOIN links ON ("DiscordMessages"."user" = links."discordId")
+         WHERE timestamp BETWEEN $1 AND $2`,
+        [Math.floor(from / 1000), Math.floor(to / 1000)]
+      )
+
+      const allEntries = [...minecraftResult.rows, ...discordResult.rows].map((e) => ({
+        uuid: e.uuid,
+        discordId: e.discordId,
+        count: Number(e.count),
+        timestamp: Number(e.timestamp)
+      }))
 
       const ScoreMaxHistory = Duration.minutes(3)
       const BaseScore = 30
 
       return this.calculateCount(allEntries, BaseScore, ScoreMaxHistory)
     })
-
-    return transaction()
   }
 
-  private getCommandsPoints(from: number, to: number): Map<string, ActivityPoint> {
-    const database = this.sqliteManager.getDatabase()
+  private async getCommandsPoints(from: number, to: number): Promise<Map<string, ActivityPoint>> {
+    return await this.postgresManager.withTransaction(async (client) => {
+      interface DatabaseCountEntry {
+        uuid: string
+        count: string
+        discordId: string | null
+        timestamp: string
+      }
 
-    const selectMinecraft = database.prepare(
-      `SELECT user as uuid, links.discordId, count, MinecraftCommands.timestamp FROM "MinecraftCommands" LEFT JOIN links ON (MinecraftCommands.user = links.uuid) WHERE timestamp BETWEEN ? AND ?`
-    )
-    const selectDiscord = database.prepare(
-      `SELECT user as discordId, links.uuid, count, DiscordCommands.timestamp FROM "DiscordCommands" JOIN links ON (DiscordCommands.user = links.discordId) WHERE timestamp BETWEEN ? AND ?`
-    )
+      const minecraftResult = await client.query<DatabaseCountEntry>(
+        `SELECT "MinecraftCommands"."user" as uuid, links."discordId", count, "MinecraftCommands".timestamp
+         FROM "MinecraftCommands"
+         LEFT JOIN links ON ("MinecraftCommands"."user" = links.uuid)
+         WHERE timestamp BETWEEN $1 AND $2`,
+        [Math.floor(from / 1000), Math.floor(to / 1000)]
+      )
 
-    const transaction = database.transaction(() => {
-      const minecraftResult = selectMinecraft.all(
-        Math.floor(from / 1000),
-        Math.floor(to / 1000)
-      ) as DatabaseCountEntry[]
-      const discordResult = selectDiscord.all(Math.floor(from / 1000), Math.floor(to / 1000)) as DatabaseCountEntry[]
-      const allEntries = [...minecraftResult, ...discordResult]
+      const discordResult = await client.query<DatabaseCountEntry>(
+        `SELECT "DiscordCommands"."user" as "discordId", links.uuid, count, "DiscordCommands".timestamp
+         FROM "DiscordCommands"
+         JOIN links ON ("DiscordCommands"."user" = links."discordId")
+         WHERE timestamp BETWEEN $1 AND $2`,
+        [Math.floor(from / 1000), Math.floor(to / 1000)]
+      )
+
+      const allEntries = [...minecraftResult.rows, ...discordResult.rows].map((e) => ({
+        uuid: e.uuid,
+        discordId: e.discordId,
+        count: Number(e.count),
+        timestamp: Number(e.timestamp)
+      }))
 
       const ScoreMaxHistory = Duration.minutes(5)
       const BaseScore = 15
 
       return this.calculateCount(allEntries, BaseScore, ScoreMaxHistory)
     })
-
-    return transaction()
   }
 
   private calculateCount(
@@ -576,6 +657,8 @@ class ScoreDatabase {
     const countHistory = new Map<string, number[]>()
 
     for (const entry of allEntries) {
+      if (!entry.uuid) continue
+
       let activityEntry = leaderboard.get(entry.uuid)
       if (activityEntry === undefined) {
         activityEntry = { uuid: entry.uuid, discordId: entry.discordId ?? undefined, points: 0 }
@@ -605,35 +688,36 @@ class ScoreDatabase {
     return leaderboard
   }
 
-  private getOnlinePoints(from: number, to: number): Map<string, ActivityPoint> {
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare(
-      `SELECT OnlineMembers.uuid, links.discordId, fromTimestamp, toTimestamp FROM "OnlineMembers"` +
-        ` LEFT JOIN links ON (OnlineMembers.uuid = links.uuid)` +
-        ` WHERE ((fromTimestamp BETWEEN @fromTimestamp AND @toTimestamp) OR (toTimestamp BETWEEN @fromTimestamp AND @toTimestamp))` +
-        ` ORDER BY fromTimestamp ASC`
-    )
-
+  private async getOnlinePoints(from: number, to: number): Promise<Map<string, ActivityPoint>> {
     interface DatabaseTimeframes {
       uuid: string
-      discordId: string | undefined
-      fromTimestamp: number
-      toTimestamp: number
+      discordId: string | null
+      fromTimestamp: string
+      toTimestamp: string
     }
 
-    const timeframes = select.all({
-      fromTimestamp: Math.floor(from),
-      toTimestamp: Math.floor(to)
-    }) as DatabaseTimeframes[]
+    const timeframes = await this.postgresManager.query<DatabaseTimeframes>(
+      `SELECT "OnlineMembers".uuid, links."discordId", "fromTimestamp", "toTimestamp"
+       FROM "OnlineMembers"
+       LEFT JOIN links ON ("OnlineMembers".uuid = links.uuid)
+       WHERE (("fromTimestamp" BETWEEN $1 AND $2) OR ("toTimestamp" BETWEEN $1 AND $2))
+       ORDER BY "fromTimestamp" ASC`,
+      [Math.floor(from / 1000), Math.floor(to / 1000)]
+    )
 
     const BaseScore = 15
     const ScoreCooldown = Duration.minutes(15).toSeconds()
 
     const leaderboard = new Map<string, ActivityPoint>()
     const reachedTimestamps = new Map<string, number>()
-    for (const entry of timeframes) {
-      entry.fromTimestamp = Math.max(entry.fromTimestamp, Math.floor(from / 1000))
-      entry.toTimestamp = Math.min(entry.toTimestamp, Math.floor(to / 1000))
+
+    for (const rawEntry of timeframes) {
+      const entry = {
+        uuid: rawEntry.uuid,
+        discordId: rawEntry.discordId,
+        fromTimestamp: Math.max(Number(rawEntry.fromTimestamp), Math.floor(from / 1000)),
+        toTimestamp: Math.min(Number(rawEntry.toTimestamp), Math.floor(to / 1000))
+      }
 
       let user = leaderboard.get(entry.uuid)
       if (user === undefined) {
@@ -667,136 +751,128 @@ class ScoreDatabase {
     return leaderboard
   }
 
-  public getPoints(from: number, to: number): Map<string, ActivityTotalPoints> {
+  public async getPoints(from: number, to: number): Promise<Map<string, ActivityTotalPoints>> {
     assert.ok(from < to, '"from" timestamp must be earlier than the "to" timestamp')
 
-    const database = this.sqliteManager.getDatabase()
-    const transaction = database.transaction(() => {
-      const leaderboard = new Map<string, ActivityTotalPoints>()
-      const getUser = (entry: ActivityPoint) => {
-        let user = leaderboard.get(entry.uuid)
-        if (user === undefined) {
-          user = {
-            uuid: entry.uuid,
-            discordId: entry.discordId ?? undefined,
-            total: 0,
-            chat: 0,
-            online: 0,
-            commands: 0
-          }
-          leaderboard.set(entry.uuid, user)
+    const leaderboard = new Map<string, ActivityTotalPoints>()
+    const getUser = (entry: ActivityPoint) => {
+      let user = leaderboard.get(entry.uuid)
+      if (user === undefined) {
+        user = {
+          uuid: entry.uuid,
+          discordId: entry.discordId ?? undefined,
+          total: 0,
+          chat: 0,
+          online: 0,
+          commands: 0
         }
-        user.discordId ??= entry.discordId ?? undefined
-        return user
+        leaderboard.set(entry.uuid, user)
       }
+      user.discordId ??= entry.discordId ?? undefined
+      return user
+    }
 
-      for (const entry of this.getMessagesPoints(from, to).values()) {
-        const user = getUser(entry)
-        const points = Math.floor(entry.points)
+    for (const entry of (await this.getMessagesPoints(from, to)).values()) {
+      const user = getUser(entry)
+      const points = Math.floor(entry.points)
 
-        user.total += points
-        user.chat += points
-      }
-      for (const entry of this.getCommandsPoints(from, to).values()) {
-        const user = getUser(entry)
-        const points = Math.floor(entry.points)
+      user.total += points
+      user.chat += points
+    }
+    for (const entry of (await this.getCommandsPoints(from, to)).values()) {
+      const user = getUser(entry)
+      const points = Math.floor(entry.points)
 
-        user.total += points
-        user.commands += points
-      }
-      for (const entry of this.getOnlinePoints(from, to).values()) {
-        const user = getUser(entry)
-        const points = Math.floor(entry.points)
+      user.total += points
+      user.commands += points
+    }
+    for (const entry of (await this.getOnlinePoints(from, to)).values()) {
+      const user = getUser(entry)
+      const points = Math.floor(entry.points)
 
-        user.total += points
-        user.online += points
-      }
+      user.total += points
+      user.online += points
+    }
 
-      return leaderboard
-    })
-
-    return transaction()
+    return leaderboard
   }
 
-  public getLegacyUsernames(oldestTimestamp: number): Set<string> {
-    const database = this.sqliteManager.getDatabase()
-
+  public async getLegacyUsernames(oldestTimestamp: number): Promise<Set<string>> {
     const result = new Set<string>()
 
-    const getMinecraftChat = database.prepare(
-      'SELECT user FROM MinecraftMessages WHERE timestamp > ? AND length(user) < 30 GROUP BY user'
+    const rows = await this.postgresManager.query<{ user: string }>(
+      `SELECT "user" FROM "MinecraftMessages"
+       WHERE timestamp > $1 AND length("user") < 30
+       GROUP BY "user"`,
+      [oldestTimestamp]
     )
-    for (const username of getMinecraftChat.pluck(true).all(oldestTimestamp)) result.add(username as string)
+
+    for (const row of rows) {
+      result.add(row.user)
+    }
 
     return result
   }
 
-  public migrateUsernameToUuid(oldestTimestamp: number, entries: { username: string; uuid: string }[]): number {
-    const database = this.sqliteManager.getDatabase()
-
-    const updateMinecraftChat = database.prepare(
-      'UPDATE MinecraftMessages SET user = ? WHERE user = ? AND timestamp > ?'
-    )
-
-    const transaction = database.transaction(() => {
+  public async migrateUsernameToUuid(
+    oldestTimestamp: number,
+    entries: { username: string; uuid: string }[]
+  ): Promise<number> {
+    return await this.postgresManager.withTransaction(async (client) => {
       let count = 0
       for (const entry of entries) {
-        const result = updateMinecraftChat.run(entry.uuid, entry.username, oldestTimestamp)
-        count += result.changes
+        const result = await client.query(
+          `UPDATE "MinecraftMessages" SET "user" = $1 WHERE "user" = $2 AND timestamp > $3`,
+          [entry.uuid, entry.username, oldestTimestamp]
+        )
+        count += result.rowCount ?? 0
       }
-
       return count
     })
-
-    return transaction()
   }
 
-  public getBotUuids(): string[] {
-    return this.sqliteManager.getDatabase().prepare('SELECT uuid FROM "minecraftBots"').pluck(true).all() as string[]
+  public async getBotUuids(): Promise<string[]> {
+    const result = await this.postgresManager.query<{ uuid: string }>('SELECT uuid FROM "minecraftBots"')
+    return result.map((r) => r.uuid)
   }
 
-  public addBotUuid(uuid: string): void {
-    const insert = this.sqliteManager
-      .getDatabase()
-      .prepare(
-        'INSERT INTO "minecraftBots" (uuid) VALUES (?) ON CONFLICT(uuid) DO UPDATE SET updatedAt = (unixepoch())'
-      )
-
-    insert.run(uuid)
+  public async addBotUuid(uuid: string): Promise<void> {
+    await this.postgresManager.execute(
+      `INSERT INTO "minecraftBots" (uuid)
+       VALUES ($1)
+       ON CONFLICT(uuid) DO UPDATE SET "updatedAt" = FLOOR(EXTRACT(EPOCH FROM NOW()))`,
+      [uuid]
+    )
   }
 
-  public clean(): number {
+  public async clean(): Promise<number> {
     const currentTime = Math.floor(Date.now() / 1000)
     const oldestMessageTimestamp = currentTime - ScoresManager.DeleteMessagesOlderThan.toSeconds()
     const oldestMemberTimestamp = currentTime - ScoresManager.DeleteMembersOlderThan.toSeconds()
 
-    const database = this.sqliteManager.getDatabase()
-
-    const deleteMinecraftMessages = database.prepare('DELETE FROM "MinecraftMessages" WHERE timestamp < ?')
-    const deleteDiscordMessages = database.prepare('DELETE FROM "DiscordMessages" WHERE timestamp < ?')
-
-    const deleteMinecraftCommands = database.prepare('DELETE FROM "MinecraftCommands" WHERE timestamp < ?')
-    const deleteDiscordCommands = database.prepare('DELETE FROM "DiscordCommands" WHERE timestamp < ?')
-
-    const deleteAllMembers = database.prepare('DELETE FROM "AllMembers" WHERE toTimestamp < ?')
-    const deleteOnlineMembers = database.prepare('DELETE FROM "OnlineMembers" WHERE toTimestamp < ?')
-
-    const transaction = database.transaction(() => {
+    return await this.postgresManager.withTransaction(async (client) => {
       let count = 0
 
-      count += deleteMinecraftMessages.run(oldestMessageTimestamp).changes
-      count += deleteDiscordMessages.run(oldestMessageTimestamp).changes
+      const r1 = await client.query('DELETE FROM "MinecraftMessages" WHERE timestamp < $1', [oldestMessageTimestamp])
+      count += r1.rowCount ?? 0
 
-      count += deleteMinecraftCommands.run(oldestMessageTimestamp).changes
-      count += deleteDiscordCommands.run(oldestMessageTimestamp).changes
+      const r2 = await client.query('DELETE FROM "DiscordMessages" WHERE timestamp < $1', [oldestMessageTimestamp])
+      count += r2.rowCount ?? 0
 
-      count += deleteAllMembers.run(oldestMemberTimestamp).changes
-      count += deleteOnlineMembers.run(oldestMemberTimestamp).changes
+      const r3 = await client.query('DELETE FROM "MinecraftCommands" WHERE timestamp < $1', [oldestMessageTimestamp])
+      count += r3.rowCount ?? 0
+
+      const r4 = await client.query('DELETE FROM "DiscordCommands" WHERE timestamp < $1', [oldestMessageTimestamp])
+      count += r4.rowCount ?? 0
+
+      const r5 = await client.query('DELETE FROM "AllMembers" WHERE "toTimestamp" < $1', [oldestMemberTimestamp])
+      count += r5.rowCount ?? 0
+
+      const r6 = await client.query('DELETE FROM "OnlineMembers" WHERE "toTimestamp" < $1', [oldestMemberTimestamp])
+      count += r6.rowCount ?? 0
 
       return count
     })
-
-    return transaction()
   }
 }
 
