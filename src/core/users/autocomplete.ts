@@ -2,18 +2,23 @@ import assert from 'node:assert'
 
 import type { Logger } from 'log4js'
 
-import type Application from '../../application'
-import { InstanceType } from '../../common/application-event'
-import { Status } from '../../common/connectable-instance'
-import type EventHelper from '../../common/event-helper'
-import type { SqliteManager } from '../../common/sqlite-manager'
-import SubInstance from '../../common/sub-instance'
-import type UnexpectedErrorHandler from '../../common/unexpected-error-handler'
-import Duration from '../../utility/duration'
-import type { Core } from '../core'
+import type Application from '../../application.js'
+import { InstanceType } from '../../common/application-event.js'
+import { Status } from '../../common/connectable-instance.js'
+import type EventHelper from '../../common/event-helper.js'
+import type { PostgresManager } from '../../common/postgres-manager.js'
+import SubInstance from '../../common/sub-instance.js'
+import type UnexpectedErrorHandler from '../../common/unexpected-error-handler.js'
+import Duration from '../../utility/duration.js'
+import type { Core } from '../core.js'
 
 export default class Autocomplete extends SubInstance<Core, InstanceType.Core, void> {
   private static readonly MaxLife = Duration.years(1)
+
+  // In-memory cache for synchronous access
+  private usernamesCache: string[] = []
+  private ranksCache: string[] = []
+  private cacheLoaded = false
 
   constructor(
     application: Application,
@@ -21,21 +26,24 @@ export default class Autocomplete extends SubInstance<Core, InstanceType.Core, v
     eventHelper: EventHelper<InstanceType.Core>,
     logger: Logger,
     errorHandler: UnexpectedErrorHandler,
-    private readonly sqliteManager: SqliteManager
+    private readonly postgresManager: PostgresManager
   ) {
     super(application, clientInstance, eventHelper, logger, errorHandler)
 
+    // Load cache on startup
+    void this.loadCache()
+
     application.on('chat', (event) => {
-      this.addUsernames([event.user.displayName()])
+      void this.addUsernames([event.user.displayName()])
     })
     application.on('guildPlayer', (event) => {
-      this.addUsernames([event.user.mojangProfile().name])
+      void this.addUsernames([event.user.mojangProfile().name])
     })
     application.on('command', (event) => {
-      this.addUsernames([event.user.displayName()])
+      void this.addUsernames([event.user.displayName()])
     })
     application.on('commandFeedback', (event) => {
-      this.addUsernames([event.user.displayName()])
+      void this.addUsernames([event.user.displayName()])
     })
 
     setInterval(() => {
@@ -54,78 +62,114 @@ export default class Autocomplete extends SubInstance<Core, InstanceType.Core, v
       }
     })
 
-    this.sqliteManager.registerCleaner(() => {
-      const database = this.sqliteManager.getDatabase()
-      database.transaction(() => {
-        const oldestTimestamp = Date.now() - Autocomplete.MaxLife.toMilliseconds()
-        const cleanUsernames = database.prepare('DELETE FROM "autocompleteUsernames" WHERE timestamp < ?')
-        const cleanRanks = database.prepare('DELETE FROM "autocompleteRanks" WHERE timestamp < ?')
+    this.postgresManager.registerCleaner(async () => {
+      const oldestTimestamp = Date.now() - Autocomplete.MaxLife.toMilliseconds()
+      let count = 0
 
-        let count = 0
-        count += cleanUsernames.run(Math.floor(oldestTimestamp / 1000)).changes
-        count += cleanRanks.run(Math.floor(oldestTimestamp / 1000)).changes
-        if (count > 0) this.logger.debug(`Deleted ${count} old autocomplete entry`)
-      })()
+      const r1 = await this.postgresManager.execute(
+        'DELETE FROM "autocompleteUsernames" WHERE timestamp < $1',
+        [Math.floor(oldestTimestamp / 1000)]
+      )
+      count += r1
+
+      const r2 = await this.postgresManager.execute(
+        'DELETE FROM "autocompleteRanks" WHERE timestamp < $1',
+        [Math.floor(oldestTimestamp / 1000)]
+      )
+      count += r2
+
+      if (count > 0) this.logger.debug(`Deleted ${count} old autocomplete entry`)
     })
+  }
+
+  private async loadCache(): Promise<void> {
+    const usernames = await this.postgresManager.query<{ content: string }>(
+      'SELECT content FROM "autocompleteUsernames"'
+    )
+    this.usernamesCache = usernames.map((r) => r.content)
+
+    const ranks = await this.postgresManager.query<{ content: string }>('SELECT content FROM "autocompleteRanks"')
+    this.ranksCache = ranks.map((r) => r.content)
+
+    this.cacheLoaded = true
   }
 
   public username(query: string, limit: number): string[] {
-    return this.fetch('autocompleteUsernames', query, limit)
+    return this.fetchFromCache(this.usernamesCache, query, limit)
   }
 
   public rank(query: string, limit: number): string[] {
-    return this.fetch('autocompleteRanks', query, limit)
+    return this.fetchFromCache(this.ranksCache, query, limit)
   }
 
-  private fetch(table: string, query: string, limit: number): string[] {
+  private fetchFromCache(cache: string[], query: string, limit: number): string[] {
     assert.ok(limit >= 1, 'limit must be 1 or greater')
     limit = Math.floor(limit)
 
-    query = query.replaceAll(/[%_]/g, '')
+    if (!this.cacheLoaded) return []
 
-    const database = this.sqliteManager.getDatabase()
-    return database.transaction(() => {
-      const select = database.prepare(`SELECT content FROM "${table}" WHERE content LIKE ? LIMIT ?`)
+    const lowerQuery = query.toLowerCase()
+    const result: string[] = []
 
-      const result: string[] = []
-      result.push(...(select.pluck(true).all(query + '%', limit) as string[]))
-
-      if (result.length >= limit) {
-        assert.strictEqual(result.length, limit)
-        return result
+    // First, find entries that start with the query
+    for (const entry of cache) {
+      if (entry.toLowerCase().startsWith(lowerQuery)) {
+        result.push(entry)
+        if (result.length >= limit) break
       }
+    }
 
-      const restSelect = database.prepare(
-        `SELECT content FROM "${table}" WHERE content NOT IN (${result.map(() => '?').join(',')}) AND content LIKE ? LIMIT ?`
-      )
+    if (result.length >= limit) {
+      return result.slice(0, limit)
+    }
 
-      result.push(...(restSelect.pluck(true).all(...result, '%' + query + '%', limit - result.length) as string[]))
+    // Then, find entries that contain the query
+    const resultSet = new Set(result)
+    for (const entry of cache) {
+      if (!resultSet.has(entry) && entry.toLowerCase().includes(lowerQuery)) {
+        result.push(entry)
+        if (result.length >= limit) break
+      }
+    }
 
-      assert.ok(result.length <= limit)
-      return result
-    })()
+    return result.slice(0, limit)
   }
 
-  private addUsernames(usernames: string[]): void {
-    this.add('autocompleteUsernames', usernames)
+  private async addUsernames(usernames: string[]): Promise<void> {
+    await this.add('autocompleteUsernames', usernames)
+    // Update cache
+    for (const username of usernames) {
+      const trimmed = username.trim()
+      if (!this.usernamesCache.includes(trimmed)) {
+        this.usernamesCache.push(trimmed)
+      }
+    }
   }
 
-  private addRanks(ranks: string[]): void {
-    this.add('autocompleteRanks', ranks)
+  private async addRanks(ranks: string[]): Promise<void> {
+    await this.add('autocompleteRanks', ranks)
+    // Update cache
+    for (const rank of ranks) {
+      const trimmed = rank.trim()
+      if (!this.ranksCache.includes(trimmed)) {
+        this.ranksCache.push(trimmed)
+      }
+    }
   }
 
-  private add(table: string, entries: string[]): void {
-    const database = this.sqliteManager.getDatabase()
-    const transaction = database.transaction(() => {
-      const insert = database.prepare(
-        `INSERT OR REPLACE INTO "${table}" (loweredContent, content, timestamp) VALUES (?, ?, ?)`
-      )
+  private async add(table: string, entries: string[]): Promise<void> {
+    await this.postgresManager.withTransaction(async (client) => {
       for (const entry of entries) {
-        insert.run(entry.toLowerCase().trim(), entry.trim(), Math.floor(Date.now() / 1000))
+        await client.query(
+          `INSERT INTO "${table}" ("loweredContent", content, timestamp)
+           VALUES ($1, $2, $3)
+           ON CONFLICT ("loweredContent") DO UPDATE SET
+             content = EXCLUDED.content,
+             timestamp = EXCLUDED.timestamp`,
+          [entry.toLowerCase().trim(), entry.trim(), Math.floor(Date.now() / 1000)]
+        )
       }
     })
-
-    transaction()
   }
 
   private async fetchGuildInfo(): Promise<void> {
@@ -151,8 +195,8 @@ export default class Autocomplete extends SubInstance<Core, InstanceType.Core, v
 
     await Promise.all(tasks)
 
-    this.addUsernames(usernames)
-    this.addRanks(ranks)
+    await this.addUsernames(usernames)
+    await this.addRanks(ranks)
   }
 
   private async resolveGuildRanks(): Promise<void> {
@@ -173,6 +217,6 @@ export default class Autocomplete extends SubInstance<Core, InstanceType.Core, v
       }
     }
 
-    this.addRanks(ranks)
+    await this.addRanks(ranks)
   }
 }

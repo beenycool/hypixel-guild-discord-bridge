@@ -398,7 +398,7 @@ async function handleAllListInteraction(context: DiscordCommandContext): Promise
     DefaultTimeout,
     context.errorHandler,
     async (page: number): Promise<FetchPageResult> => {
-      const punishments = context.application.core.allPunishments()
+      const punishments = await context.application.core.allPunishments()
 
       const list = await formatList(context, punishments, page)
 

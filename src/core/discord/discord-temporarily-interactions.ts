@@ -1,82 +1,86 @@
-import type { SqliteManager } from '../../common/sqlite-manager'
+import type { PostgresManager } from '../../common/postgres-manager.js'
 
-import type { DiscordConfigurations } from './discord-configurations'
+import type { DiscordConfigurations } from './discord-configurations.js'
 
 export class DiscordTemporarilyInteractions {
   constructor(
-    private readonly sqliteManager: SqliteManager,
+    private readonly postgresManager: PostgresManager,
     private readonly discordConfigurations: DiscordConfigurations
   ) {}
 
-  public add(entries: DiscordMessage[]): void {
-    const database = this.sqliteManager.getDatabase()
-    const transaction = database.transaction(() => {
-      const insert = database.prepare(
-        'INSERT OR REPLACE INTO "discordTempInteractions" (messageId, channelId,createdAt) VALUES (?, ?, ?)'
-      )
+  public async add(entries: DiscordMessage[]): Promise<void> {
+    await this.postgresManager.withTransaction(async (client) => {
       for (const entry of entries) {
-        insert.run(entry.messageId, entry.channelId, Math.floor(entry.createdAt / 1000))
+        await client.query(
+          `INSERT INTO "discordTempInteractions" ("messageId", "channelId", "createdAt")
+           VALUES ($1, $2, $3)
+           ON CONFLICT ("messageId") DO UPDATE SET
+             "channelId" = EXCLUDED."channelId",
+             "createdAt" = EXCLUDED."createdAt"`,
+          [entry.messageId, entry.channelId, Math.floor(entry.createdAt / 1000)]
+        )
       }
     })
-
-    transaction()
   }
 
-  public findToDelete(): DiscordMessage[] {
-    const database = this.sqliteManager.getDatabase()
-    const transaction = database.transaction(() => {
-      const currentTime = Date.now()
-      const maxInteractions = this.discordConfigurations.getMaxTemporarilyInteractions()
-      const duration = this.discordConfigurations.getDurationTemporarilyInteractions()
+  public async findToDelete(): Promise<DiscordMessage[]> {
+    const currentTime = Date.now()
+    const maxInteractions = this.discordConfigurations.getMaxTemporarilyInteractions()
+    const duration = this.discordConfigurations.getDurationTemporarilyInteractions()
 
-      const select = database.prepare('SELECT * FROM "discordTempInteractions"')
-      const allInteractions = select.all() as DiscordMessage[]
+    const allInteractions = await this.postgresManager.query<DiscordMessageRow>(
+      'SELECT * FROM "discordTempInteractions"'
+    )
 
-      const toDelete: DiscordMessage[] = []
+    const toDelete: DiscordMessage[] = []
 
-      allInteractions
-        // reversed to ease the sorting since the list is mostly created chronologically
-        // eslint-disable-next-line unicorn/no-array-reverse
-        .reverse()
-        .sort((a, b) => b.createdAt - a.createdAt)
+    // Convert rows to DiscordMessage and sort by createdAt descending
+    const interactions: DiscordMessage[] = allInteractions.map((row) => ({
+      messageId: row.messageId,
+      channelId: row.channelId,
+      createdAt: Number(row.createdAt)
+    }))
 
-      const interactionsCount = new Map<string, number>()
-      for (const interaction of allInteractions) {
-        if (interaction.createdAt * 1000 + duration.toMilliseconds() < currentTime) {
-          toDelete.push(interaction)
-          continue
-        }
+    interactions.sort((a, b) => b.createdAt - a.createdAt)
 
-        const currentInteractionsCount = interactionsCount.get(interaction.channelId) ?? 0
-        if (currentInteractionsCount >= maxInteractions) {
-          toDelete.push(interaction)
-          continue
-        }
-
-        interactionsCount.set(interaction.channelId, currentInteractionsCount + 1)
+    const interactionsCount = new Map<string, number>()
+    for (const interaction of interactions) {
+      if (interaction.createdAt * 1000 + duration.toMilliseconds() < currentTime) {
+        toDelete.push(interaction)
+        continue
       }
 
-      return toDelete
-    })
+      const currentInteractionsCount = interactionsCount.get(interaction.channelId) ?? 0
+      if (currentInteractionsCount >= maxInteractions) {
+        toDelete.push(interaction)
+        continue
+      }
 
-    return transaction()
+      interactionsCount.set(interaction.channelId, currentInteractionsCount + 1)
+    }
+
+    return toDelete
   }
 
-  public remove(messagesIds: DiscordMessage['messageId'][]): number {
-    const database = this.sqliteManager.getDatabase()
-    const transaction = database.transaction(() => {
-      const update = database.prepare('DELETE FROM "discordTempInteractions" WHERE messageId = ?')
-
+  public async remove(messagesIds: DiscordMessage['messageId'][]): Promise<number> {
+    return await this.postgresManager.withTransaction(async (client) => {
       let count = 0
-      for (const entry of messagesIds) {
-        count += update.run(entry).changes
+      for (const messageId of messagesIds) {
+        const result = await client.query(
+          'DELETE FROM "discordTempInteractions" WHERE "messageId" = $1',
+          [messageId]
+        )
+        count += result.rowCount ?? 0
       }
-
       return count
     })
-
-    return transaction()
   }
+}
+
+interface DiscordMessageRow {
+  channelId: string
+  messageId: string
+  createdAt: string | number
 }
 
 export interface DiscordMessage {

@@ -15,7 +15,7 @@ export default {
   handler: async function (context) {
     assert.ok(context.interaction.inGuild())
 
-    const entries = context.application.core.discordLeaderboards.getAll()
+    const entries = await context.application.core.discordLeaderboards.getAll()
 
     let result = ''
     result +=

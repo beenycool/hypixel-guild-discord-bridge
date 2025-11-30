@@ -1,4 +1,4 @@
-version: 2
+version: 3
 
 general:
   # Get Hypixel API key by creating one via dashboard.hypixel.net
@@ -6,6 +6,14 @@ general:
   # Share basic anonymous metrics to display on the project main page as a way to show its popularity.
   # All metrics are anonymous and are limited to counting and never about anything specific
   shareMetrics: true
+  # Urchin API key for blacklist lookups (optional)
+  # urchinApiKey: 'your-urchin-api-key-here'
+
+database:
+  # PostgreSQL connection string
+  # For Nest (Hack Club) internal: postgres://username@localhost/username_database?sslmode=disable&host=/var/run/postgresql
+  # For external connection: postgres://username:password@hackclub.app/username_database
+  connectionString: 'postgres://username:password@hackclub.app/username_database'
 
 discord:
   # Create new discord bot from https://discordapp.com/developers and generate a secret key

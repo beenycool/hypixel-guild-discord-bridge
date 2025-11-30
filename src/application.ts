@@ -107,17 +107,10 @@ export default class Application extends TypedEmitter<ApplicationEvents> impleme
       hypixelCacheTime: 300
     })
 
-    this.core = new Core(this)
-    this.mojangApi = this.core.mojangApi
-
-    let selectedLanguage = this.core.languageConfigurations.getLanguage()
-    if (!Object.values(ApplicationLanguages).includes(selectedLanguage)) {
-      this.logger.warn(`Saved language '${selectedLanguage}' is not supported.`)
-      this.logger.info(`Switching to default language '${LanguageConfigurations.DefaultLanguage}'.`)
-
-      selectedLanguage = LanguageConfigurations.DefaultLanguage
-    }
-    this.changeLanguage(selectedLanguage)
+    // Core is initialized with database connection string
+    this.core = new Core(this, this.config.database.connectionString)
+    // Note: mojangApi will be available after core.awaitReady() is called
+    this.mojangApi = undefined as unknown as MojangApi // Will be set after init
 
     this.discordInstance = new DiscordInstance(this, this.config.discord)
 
@@ -179,8 +172,26 @@ export default class Application extends TypedEmitter<ApplicationEvents> impleme
       .catch(this.errorHandler.promiseCatch(`changing language to ${languageName}`))
   }
 
+  public getConfig(): Readonly<ApplicationConfig> {
+    return this.config
+  }
+
   public async start(): Promise<void> {
     await this.core.awaitReady()
+
+    // Now that core is ready, we can access mojangApi and language settings
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    ;(this as { mojangApi: MojangApi }).mojangApi = this.core.mojangApi
+
+    let selectedLanguage = this.core.languageConfigurations.getLanguage()
+    if (!Object.values(ApplicationLanguages).includes(selectedLanguage)) {
+      this.logger.warn(`Saved language '${selectedLanguage}' is not supported.`)
+      this.logger.info(`Switching to default language '${LanguageConfigurations.DefaultLanguage}'.`)
+
+      selectedLanguage = LanguageConfigurations.DefaultLanguage
+    }
+    this.changeLanguage(selectedLanguage)
+
     await this.pluginsManager.loadPlugins(this.rootDirectory)
 
     for (const instance of this.getAllInstances()) {

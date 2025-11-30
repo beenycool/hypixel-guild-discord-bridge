@@ -1,82 +1,64 @@
-import type { UserLink } from '../../common/application-event'
-import type { SqliteManager } from '../../common/sqlite-manager'
+import type { UserLink } from '../../common/application-event.js'
+import type { PostgresManager } from '../../common/postgres-manager.js'
 
 export class Verification {
   private readonly database: VerificationDatabase
 
-  constructor(sqliteManager: SqliteManager) {
-    this.database = new VerificationDatabase(sqliteManager)
+  constructor(postgresManager: PostgresManager) {
+    this.database = new VerificationDatabase(postgresManager)
   }
 
-  public findByDiscord(discordId: string): Awaitable<UserLink | undefined> {
+  public async findByDiscord(discordId: string): Promise<UserLink | undefined> {
     return this.database.getLinkByDiscord(discordId)
   }
 
-  public findByIngame(uuid: string): Awaitable<UserLink | undefined> {
+  public async findByIngame(uuid: string): Promise<UserLink | undefined> {
     return this.database.getLinkByUuid(uuid)
   }
 
-  public addConfirmedLink(discordId: string, uuid: string): void {
-    this.database.addLink(discordId, uuid)
+  public async addConfirmedLink(discordId: string, uuid: string): Promise<void> {
+    await this.database.addLink(discordId, uuid)
   }
 
-  public invalidate(options: { discordId?: string; uuid?: string }): number {
+  public async invalidate(options: { discordId?: string; uuid?: string }): Promise<number> {
     let count = 0
-    if (options.uuid !== undefined) count += this.database.invalidateUuid(options.uuid)
-    if (options.discordId !== undefined) count += this.database.invalidateDiscord(options.discordId)
+    if (options.uuid !== undefined) count += await this.database.invalidateUuid(options.uuid)
+    if (options.discordId !== undefined) count += await this.database.invalidateDiscord(options.discordId)
     return count
   }
 }
 
 class VerificationDatabase {
-  constructor(private readonly sqliteManager: SqliteManager) {}
+  constructor(private readonly postgresManager: PostgresManager) {}
 
-  public addLink(discordId: string, uuid: string): void {
-    const database = this.sqliteManager.getDatabase()
-    const deleteOldLinks = database.prepare('DELETE FROM "links" WHERE uuid = ? OR discordId = ?')
-    const insert = database.prepare('INSERT INTO "links" (uuid, discordId) VALUES (?, ?)')
-
-    const transaction = database.transaction(() => {
-      deleteOldLinks.run(uuid, discordId)
-      insert.run(uuid, discordId)
+  public async addLink(discordId: string, uuid: string): Promise<void> {
+    await this.postgresManager.withTransaction(async (client) => {
+      await client.query('DELETE FROM "links" WHERE uuid = $1 OR "discordId" = $2', [uuid, discordId])
+      await client.query('INSERT INTO "links" (uuid, "discordId") VALUES ($1, $2)', [uuid, discordId])
     })
-
-    transaction()
   }
 
-  public getLinkByUuid(uuid: string): UserLink | undefined {
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare('SELECT uuid, discordId FROM "links" WHERE uuid = ? LIMIT 1')
-    return select.get(uuid) as UserLink | undefined
+  public async getLinkByUuid(uuid: string): Promise<UserLink | undefined> {
+    const result = await this.postgresManager.queryOne<UserLink>(
+      'SELECT uuid, "discordId" FROM "links" WHERE uuid = $1 LIMIT 1',
+      [uuid]
+    )
+    return result
   }
 
-  public getLinkByDiscord(discordId: string): UserLink | undefined {
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare('SELECT uuid, discordId FROM "links" WHERE discordId = ? LIMIT 1')
-    return select.get(discordId) as UserLink | undefined
+  public async getLinkByDiscord(discordId: string): Promise<UserLink | undefined> {
+    const result = await this.postgresManager.queryOne<UserLink>(
+      'SELECT uuid, "discordId" FROM "links" WHERE "discordId" = $1 LIMIT 1',
+      [discordId]
+    )
+    return result
   }
 
-  public invalidateUuid(uuid: string): number {
-    const database = this.sqliteManager.getDatabase()
-
-    const deleteOldLinks = database.prepare('DELETE FROM "links" WHERE uuid = ?')
-
-    const transaction = database.transaction(() => {
-      return deleteOldLinks.run(uuid).changes
-    })
-
-    return transaction()
+  public async invalidateUuid(uuid: string): Promise<number> {
+    return await this.postgresManager.execute('DELETE FROM "links" WHERE uuid = $1', [uuid])
   }
 
-  public invalidateDiscord(discordId: string): number {
-    const database = this.sqliteManager.getDatabase()
-
-    const deleteOldLinks = database.prepare('DELETE FROM "links" WHERE discordId = ?')
-
-    const transaction = database.transaction(() => {
-      return deleteOldLinks.run(discordId).changes
-    })
-
-    return transaction()
+  public async invalidateDiscord(discordId: string): Promise<number> {
+    return await this.postgresManager.execute('DELETE FROM "links" WHERE "discordId" = $1', [discordId])
   }
 }

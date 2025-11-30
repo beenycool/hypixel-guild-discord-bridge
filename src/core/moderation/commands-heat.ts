@@ -1,11 +1,11 @@
-import type Database from 'better-sqlite3'
+import type { PoolClient } from 'pg'
 import type { Logger } from 'log4js'
 
-import type { SqliteManager } from '../../common/sqlite-manager'
-import type { User, UserIdentifier } from '../../common/user'
-import Duration from '../../utility/duration'
+import type { PostgresManager } from '../../common/postgres-manager.js'
+import type { User, UserIdentifier } from '../../common/user.js'
+import Duration from '../../utility/duration.js'
 
-import type { ModerationConfigurations } from './moderation-configurations'
+import type { ModerationConfigurations } from './moderation-configurations.js'
 
 export class CommandsHeat {
   private static readonly ActionExpiresAfter = Duration.days(1)
@@ -15,111 +15,105 @@ export class CommandsHeat {
   private readonly moderationConfig
 
   constructor(
-    private readonly sqliteManager: SqliteManager,
+    private readonly postgresManager: PostgresManager,
     config: ModerationConfigurations,
     logger: Logger
   ) {
     this.moderationConfig = config
 
-    sqliteManager.registerCleaner(() => {
-      const database = sqliteManager.getDatabase()
-      database.transaction(() => {
-        const deleteStatement = database.prepare('DELETE FROM "heatsCommands" WHERE createdAt < ?')
-        const oldestTimestamp = Date.now() - CommandsHeat.ActionExpiresAfter.toMilliseconds()
-        const result = deleteStatement.run(Math.floor(oldestTimestamp / 1000)).changes
-        if (result > 0) logger.debug(`Deleted ${result} entry of expired heats-commands`)
-      })()
+    postgresManager.registerCleaner(async () => {
+      const oldestTimestamp = Date.now() - CommandsHeat.ActionExpiresAfter.toMilliseconds()
+      const result = await postgresManager.execute(
+        'DELETE FROM "heatsCommands" WHERE "createdAt" < $1',
+        [Math.floor(oldestTimestamp / 1000)]
+      )
+      if (result > 0) logger.debug(`Deleted ${result} entry of expired heats-commands`)
     })
   }
 
-  public add(user: User, type: HeatType): HeatResult {
+  public async add(user: User, type: HeatType): Promise<HeatResult> {
     const currentTime = Date.now()
 
-    const database = this.sqliteManager.getDatabase()
     const userIdentifier = user.getUserIdentifier()
     const allIdentifiers = user.allIdentifiers()
     const action: HeatAction = { identifier: user.getUserIdentifier(), timestamp: currentTime, type: type }
 
-    const transaction = database.transaction(() => {
+    return await this.postgresManager.withTransaction(async (client) => {
       if (user.immune()) {
-        this.addEntries(database, [action])
+        await this.addEntries(client, [action])
         return HeatResult.Allowed
       }
 
-      const heatActions = this.getUserHeats(database, currentTime, allIdentifiers, type)
+      const heatActions = await this.getUserHeats(client, currentTime, allIdentifiers, type)
       const typeInfo = this.resolveType(type)
 
-      this.addEntries(database, [action])
+      await this.addEntries(client, [action])
 
       if (heatActions >= typeInfo.maxLimit) return HeatResult.Denied
 
       // 1+ added to help with low warnLimit
-      if (heatActions + 1 >= typeInfo.warnLimit && !this.warned(database, currentTime, allIdentifiers, type)) {
-        this.setLastWarning(database, currentTime, userIdentifier, type)
+      if (heatActions + 1 >= typeInfo.warnLimit && !(await this.warned(client, currentTime, allIdentifiers, type))) {
+        await this.setLastWarning(client, currentTime, userIdentifier, type)
         return HeatResult.Warn
       }
 
       return HeatResult.Allowed
     })
-
-    return transaction()
   }
 
-  public tryAdd(user: User, type: HeatType): HeatResult {
+  public async tryAdd(user: User, type: HeatType): Promise<HeatResult> {
     const currentTime = Date.now()
 
-    const database = this.sqliteManager.getDatabase()
     const userIdentifier = user.getUserIdentifier()
     const allIdentifiers = user.allIdentifiers()
     const action: HeatAction = { identifier: user.getUserIdentifier(), timestamp: currentTime, type: type }
-    const transaction = database.transaction(() => {
+
+    return await this.postgresManager.withTransaction(async (client) => {
       if (user.immune()) {
-        this.addEntries(database, [action])
+        await this.addEntries(client, [action])
         return HeatResult.Allowed
       }
 
-      const heatActions = this.getUserHeats(database, currentTime, allIdentifiers, type)
+      const heatActions = await this.getUserHeats(client, currentTime, allIdentifiers, type)
       const typeInfo = this.resolveType(type)
 
       if (heatActions >= typeInfo.maxLimit) return HeatResult.Denied
 
-      this.addEntries(database, [action])
+      await this.addEntries(client, [action])
 
       // 1+ added to help with low warnLimit
-      if (heatActions + 1 >= typeInfo.warnLimit && !this.warned(database, currentTime, allIdentifiers, type)) {
-        this.setLastWarning(database, currentTime, userIdentifier, type)
+      if (heatActions + 1 >= typeInfo.warnLimit && !(await this.warned(client, currentTime, allIdentifiers, type))) {
+        await this.setLastWarning(client, currentTime, userIdentifier, type)
         return HeatResult.Warn
       }
 
       return HeatResult.Allowed
     })
-
-    return transaction()
   }
 
-  private addEntries(database: Database.Database, heatActions: HeatAction[]): void {
-    const insert = database.prepare(
-      'INSERT INTO "heatsCommands" (originInstance, userId, type, createdAt) VALUES (?, ?, ?, ?)'
-    )
-
+  private async addEntries(client: PoolClient, heatActions: HeatAction[]): Promise<void> {
     for (const heatAction of heatActions) {
-      insert.run(
-        heatAction.identifier.originInstance,
-        heatAction.identifier.userId,
-        heatAction.type,
-        Math.floor(heatAction.timestamp / 1000)
+      await client.query(
+        'INSERT INTO "heatsCommands" ("originInstance", "userId", type, "createdAt") VALUES ($1, $2, $3, $4)',
+        [
+          heatAction.identifier.originInstance,
+          heatAction.identifier.userId,
+          heatAction.type,
+          Math.floor(heatAction.timestamp / 1000)
+        ]
       )
     }
   }
 
-  private getUserHeats(
-    database: Database.Database,
+  private async getUserHeats(
+    client: PoolClient,
     currentTime: number,
     identifiers: UserIdentifier[],
     type: HeatType
-  ): number {
+  ): Promise<number> {
     let query = 'SELECT COUNT(*) FROM "heatsCommands" WHERE '
     const parameters: unknown[] = []
+    let paramIndex = 1
 
     if (identifiers.length > 0) {
       query += '('
@@ -129,27 +123,29 @@ export class CommandsHeat {
         parameters.push(identifier.originInstance)
         parameters.push(identifier.userId)
 
-        query += `(originInstance = ? AND userId = ?)`
+        query += `("originInstance" = $${paramIndex++} AND "userId" = $${paramIndex++})`
         if (index !== identifiers.length - 1) query += ' OR '
       }
       query += ') AND '
     }
 
-    query += 'type = ? AND createdAt > ?'
+    query += `type = $${paramIndex++} AND "createdAt" > $${paramIndex++}`
     parameters.push(type)
     parameters.push(Math.floor((currentTime - CommandsHeat.ActionExpiresAfter.toMilliseconds()) / 1000))
 
-    return database.prepare(query).pluck(true).get(parameters) as number
+    const result = await client.query(query, parameters)
+    return Number(result.rows[0].count)
   }
 
-  private warned(
-    database: Database.Database,
+  private async warned(
+    client: PoolClient,
     currentTime: number,
     identifiers: UserIdentifier[],
     type: HeatType
-  ): boolean {
-    let query = 'SELECT IFNULL(MAX(warnedAt), 0) FROM "heatsCommandsWarnings" WHERE '
+  ): Promise<boolean> {
+    let query = 'SELECT COALESCE(MAX("warnedAt"), 0) as max_warned FROM "heatsCommandsWarnings" WHERE '
     const parameters: unknown[] = []
+    let paramIndex = 1
 
     if (identifiers.length > 0) {
       query += '('
@@ -159,30 +155,33 @@ export class CommandsHeat {
         parameters.push(identifier.originInstance)
         parameters.push(identifier.userId)
 
-        query += `(originInstance = ? AND userId = ?)`
+        query += `("originInstance" = $${paramIndex++} AND "userId" = $${paramIndex++})`
         if (index !== identifiers.length - 1) query += ' OR '
       }
       query += ') AND '
     }
 
-    query += 'type = ?'
+    query += `type = $${paramIndex++}`
     parameters.push(type)
 
-    const lastWarning = database.prepare(query).pluck(true).get(parameters) as number
+    const result = await client.query(query, parameters)
+    const lastWarning = Number(result.rows[0].max_warned)
 
     return lastWarning * 1000 + CommandsHeat.WarnEvery.toMilliseconds() > currentTime
   }
 
-  private setLastWarning(
-    database: Database.Database,
+  private async setLastWarning(
+    client: PoolClient,
     timestamp: number,
     identifier: UserIdentifier,
     type: HeatType
-  ): void {
-    const replace = database.prepare(
-      'INSERT OR REPLACE INTO "heatsCommandsWarnings" (originInstance, userId, type, warnedAt) VALUES(?, ?, ?, ?)'
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO "heatsCommandsWarnings" ("originInstance", "userId", type, "warnedAt")
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT ("originInstance", "userId", type) DO UPDATE SET "warnedAt" = EXCLUDED."warnedAt"`,
+      [identifier.originInstance, identifier.userId, type, Math.floor(timestamp / 1000)]
     )
-    replace.run(identifier.originInstance, identifier.userId, type, Math.floor(timestamp / 1000))
   }
 
   private resolveType(type: HeatType): { expire: Duration; maxLimit: number; warnLimit: number; warnEvery: Duration } {

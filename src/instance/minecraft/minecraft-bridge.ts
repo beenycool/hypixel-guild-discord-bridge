@@ -9,6 +9,7 @@ import type {
   ChatEvent,
   CommandEvent,
   CommandFeedbackEvent,
+  CommandImageEvent,
   GuildGeneralEvent,
   GuildPlayerEvent,
   InstanceStatusEvent,
@@ -185,6 +186,13 @@ export default class MinecraftBridge extends Bridge<MinecraftInstance> {
 
   onCommandFeedback(event: CommandFeedbackEvent): void | Promise<void> {
     this.handleCommand(event, true)
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onCommandImage(event: CommandImageEvent): void | Promise<void> {
+    // Minecraft bridge does not support sending images directly
+    // Images are only sent to Discord
+    return undefined
   }
 
   private handleCommand(event: CommandEvent, feedback: boolean) {

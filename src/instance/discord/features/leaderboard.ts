@@ -57,9 +57,8 @@ export default class Leaderboard extends SubInstance<DiscordInstance, InstanceTy
     await interaction.deferReply({ flags: MessageFlags.Ephemeral })
 
     const messageId = interaction.message.id
-    const leaderboardConfig = this.application.core.discordLeaderboards
-      .getAll()
-      .find((entry) => entry.messageId === messageId)
+    const entries = await this.application.core.discordLeaderboards.getAll()
+    const leaderboardConfig = entries.find((entry) => entry.messageId === messageId)
     if (leaderboardConfig === undefined) {
       await interaction.editReply({ content: 'This leaderboard is not managed by the Application anymore :(' })
       return
@@ -117,7 +116,7 @@ export default class Leaderboard extends SubInstance<DiscordInstance, InstanceTy
 
     const DefaultOptions = { addFooter: false, addLastUpdateAt: true, page: 0, user: undefined }
 
-    const entries = this.application.core.discordLeaderboards.getAll()
+    const entries = await this.application.core.discordLeaderboards.getAll()
     const toDelete: string[] = []
     const toUpdate: { messageId: string; updatedAt: number }[] = []
     const cache = new Map<LeaderboardEntry['type'], LeaderboardResult>()
@@ -221,7 +220,7 @@ export default class Leaderboard extends SubInstance<DiscordInstance, InstanceTy
   }
 
   public async getMessage30Days(option: LeaderboardOptions): Promise<LeaderboardResult> {
-    let leaderboard = this.application.core.scoresManager.getMessages30Days()
+    let leaderboard = await this.application.core.scoresManager.getMessages30Days()
     let result = ''
 
     if (option.guildId !== undefined) {
@@ -256,7 +255,7 @@ export default class Leaderboard extends SubInstance<DiscordInstance, InstanceTy
   }
 
   public async getOnline30Days(option: LeaderboardOptions): Promise<LeaderboardResult> {
-    let leaderboard = this.application.core.scoresManager.getOnline30Days()
+    let leaderboard = await this.application.core.scoresManager.getOnline30Days()
     let result = ''
 
     if (option.guildId !== undefined) {
@@ -295,7 +294,7 @@ export default class Leaderboard extends SubInstance<DiscordInstance, InstanceTy
   }
 
   public async getPoints30Days(option: LeaderboardOptions): Promise<LeaderboardResult> {
-    let leaderboard = this.application.core.scoresManager.getPoints30Days()
+    let leaderboard = await this.application.core.scoresManager.getPoints30Days()
     let result = ''
 
     if (option.guildId !== undefined) {

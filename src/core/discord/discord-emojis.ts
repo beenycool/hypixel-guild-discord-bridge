@@ -1,18 +1,16 @@
-import type { SqliteManager } from '../../common/sqlite-manager'
+import type { PostgresManager } from '../../common/postgres-manager.js'
 
 export class DiscordEmojis {
-  constructor(private readonly sqliteManager: SqliteManager) {}
+  constructor(private readonly postgresManager: PostgresManager) {}
 
-  public replaceAll(entries: EmojiConfig[]): void {
-    const database = this.sqliteManager.getDatabase()
-    const transaction = database.transaction(() => {
-      const deleteEntry = database.prepare('DELETE FROM "discordEmojis" WHERE name = ?')
-      const insert = database.prepare('INSERT INTO "discordEmojis" (name, hash) VALUES (?, ?)')
-
+  public async replaceAll(entries: EmojiConfig[]): Promise<void> {
+    await this.postgresManager.withTransaction(async (client) => {
       const existingEntries = new Map<string, string>()
-      for (const existingEntry of this.getAll()) {
+      const existingResult = await client.query<EmojiConfig>('SELECT name, hash FROM "discordEmojis"')
+      for (const existingEntry of existingResult.rows) {
         existingEntries.set(existingEntry.name, existingEntry.hash)
       }
+
       const toRegisterEntries = new Map<string, string>()
       for (const entry of entries) {
         toRegisterEntries.set(entry.name, entry.hash)
@@ -21,30 +19,31 @@ export class DiscordEmojis {
       for (const [toRegisterName, toRegisterHash] of toRegisterEntries) {
         const existingHash = existingEntries.get(toRegisterName)
         if (existingHash === undefined) {
-          insert.run(toRegisterName, toRegisterHash)
+          await client.query(
+            'INSERT INTO "discordEmojis" (name, hash) VALUES ($1, $2)',
+            [toRegisterName, toRegisterHash]
+          )
           continue
         }
 
         existingEntries.delete(toRegisterName)
         if (toRegisterHash !== existingHash) {
-          deleteEntry.run(toRegisterName)
-          insert.run(toRegisterName, toRegisterHash)
+          await client.query('DELETE FROM "discordEmojis" WHERE name = $1', [toRegisterName])
+          await client.query(
+            'INSERT INTO "discordEmojis" (name, hash) VALUES ($1, $2)',
+            [toRegisterName, toRegisterHash]
+          )
         }
       }
 
       for (const existingName of existingEntries.keys()) {
-        deleteEntry.run(existingName)
+        await client.query('DELETE FROM "discordEmojis" WHERE name = $1', [existingName])
       }
     })
-
-    transaction()
   }
 
-  public getAll(): EmojiConfig[] {
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare('SELECT name, hash FROM "discordEmojis"')
-
-    return select.all() as EmojiConfig[]
+  public async getAll(): Promise<EmojiConfig[]> {
+    return await this.postgresManager.query<EmojiConfig>('SELECT name, hash FROM "discordEmojis"')
   }
 }
 

@@ -4,10 +4,10 @@
  */
 import assert from 'node:assert'
 
-import type Application from '../application'
-import { InstanceType } from '../common/application-event'
-import { Instance, InternalInstancePrefix } from '../common/instance'
-import { SqliteManager } from '../common/sqlite-manager'
+import type Application from '../application.js'
+import { InstanceType } from '../common/application-event.js'
+import { Instance, InternalInstancePrefix } from '../common/instance.js'
+import { PostgresManager } from '../common/postgres-manager.js'
 import type {
   DiscordProfile,
   DiscordUser,
@@ -16,119 +16,136 @@ import type {
   MinecraftUser,
   MojangProfile,
   UserIdentifier
-} from '../common/user'
-import { User } from '../common/user'
+} from '../common/user.js'
+import { User } from '../common/user.js'
 
-import { ApplicationConfigurations } from './application-configurations'
-import { CommandsConfigurations } from './commands/commands-configurations'
-import { ConfigurationsManager } from './configurations'
-import { DiscordConfigurations } from './discord/discord-configurations'
-import { DiscordEmojis } from './discord/discord-emojis'
-import { DiscordLeaderboards } from './discord/discord-leaderboards'
-import { DiscordTemporarilyInteractions } from './discord/discord-temporarily-interactions'
-import { initializeCoreDatabase } from './initialize-database'
-import { LanguageConfigurations } from './language-configurations'
-import { MinecraftAccounts } from './minecraft/minecraft-accounts'
-import { MinecraftConfigurations } from './minecraft/minecraft-configurations'
-import { SessionsManager } from './minecraft/sessions-manager'
-import { CommandsHeat } from './moderation/commands-heat'
-import { ModerationConfigurations } from './moderation/moderation-configurations'
-import { Profanity } from './moderation/profanity'
-import type { SavedPunishment } from './moderation/punishments'
-import Punishments from './moderation/punishments'
-import PunishmentsEnforcer from './moderation/punishments-enforcer'
-import Autocomplete from './users/autocomplete'
-import { GuildManager } from './users/guild-manager'
-import { MojangApi } from './users/mojang'
-import ScoresManager from './users/scores-manager'
-import { Verification } from './users/verification'
+import { ApplicationConfigurations } from './application-configurations.js'
+import { CommandsConfigurations } from './commands/commands-configurations.js'
+import { ConfigurationsManager } from './configurations.js'
+import { DiscordConfigurations } from './discord/discord-configurations.js'
+import { DiscordEmojis } from './discord/discord-emojis.js'
+import { DiscordLeaderboards } from './discord/discord-leaderboards.js'
+import { DiscordTemporarilyInteractions } from './discord/discord-temporarily-interactions.js'
+import { initializeCoreDatabase } from './initialize-database.js'
+import { LanguageConfigurations } from './language-configurations.js'
+import { MinecraftAccounts } from './minecraft/minecraft-accounts.js'
+import { MinecraftConfigurations } from './minecraft/minecraft-configurations.js'
+import { SessionsManager } from './minecraft/sessions-manager.js'
+import { CommandsHeat } from './moderation/commands-heat.js'
+import { ModerationConfigurations } from './moderation/moderation-configurations.js'
+import { Profanity } from './moderation/profanity.js'
+import type { SavedPunishment } from './moderation/punishments.js'
+import Punishments from './moderation/punishments.js'
+import PunishmentsEnforcer from './moderation/punishments-enforcer.js'
+import Autocomplete from './users/autocomplete.js'
+import { GuildManager } from './users/guild-manager.js'
+import { MojangApi } from './users/mojang.js'
+import ScoresManager from './users/scores-manager.js'
+import { Verification } from './users/verification.js'
 
 export class Core extends Instance<InstanceType.Core> {
   // moderation
-  private readonly commandsHeat: CommandsHeat
-  private readonly profanity: Profanity
-  private readonly punishments: Punishments
-  private readonly enforcer: PunishmentsEnforcer
+  private commandsHeat!: CommandsHeat
+  private profanity!: Profanity
+  private punishments!: Punishments
+  private enforcer!: PunishmentsEnforcer
 
   // users
-  private readonly autoComplete: Autocomplete
-  public readonly guildManager: GuildManager
-  public readonly mojangApi: MojangApi
-  public readonly scoresManager: ScoresManager
-  public readonly verification: Verification
+  private autoComplete!: Autocomplete
+  public guildManager!: GuildManager
+  public mojangApi!: MojangApi
+  public scoresManager!: ScoresManager
+  public verification!: Verification
 
   // discord
-  public readonly discordConfigurations: DiscordConfigurations
-  public readonly discordLeaderboards: DiscordLeaderboards
-  public readonly discordTemporarilyInteractions: DiscordTemporarilyInteractions
-  public readonly discordEmojis: DiscordEmojis
+  public discordConfigurations!: DiscordConfigurations
+  public discordLeaderboards!: DiscordLeaderboards
+  public discordTemporarilyInteractions!: DiscordTemporarilyInteractions
+  public discordEmojis!: DiscordEmojis
 
   // minecraft
-  public readonly minecraftConfigurations: MinecraftConfigurations
-  public readonly minecraftSessions: SessionsManager
-  public readonly moderationConfiguration: ModerationConfigurations
-  public readonly minecraftAccounts: MinecraftAccounts
+  public minecraftConfigurations!: MinecraftConfigurations
+  public minecraftSessions!: SessionsManager
+  public moderationConfiguration!: ModerationConfigurations
+  public minecraftAccounts!: MinecraftAccounts
 
-  public readonly applicationConfigurations: ApplicationConfigurations
-  public readonly languageConfigurations: LanguageConfigurations
-  public readonly commandsConfigurations: CommandsConfigurations
+  public applicationConfigurations!: ApplicationConfigurations
+  public languageConfigurations!: LanguageConfigurations
+  public commandsConfigurations!: CommandsConfigurations
 
   // database
-  private readonly sqliteManager: SqliteManager
-  private readonly configurationsManager: ConfigurationsManager
+  private postgresManager!: PostgresManager
+  private configurationsManager!: ConfigurationsManager
 
-  public constructor(application: Application) {
+  private initPromise: Promise<void>
+
+  public constructor(application: Application, connectionString: string) {
     super(application, InternalInstancePrefix + 'core', InstanceType.Core)
 
-    const sqliteName = 'users.sqlite'
-    this.sqliteManager = new SqliteManager(application, this.logger, application.getConfigFilePath(sqliteName))
-    initializeCoreDatabase(this.application, this.sqliteManager, sqliteName)
+    // Store the initialization promise for awaitReady
+    this.initPromise = this.initialize(connectionString)
+  }
 
-    this.configurationsManager = new ConfigurationsManager(this.sqliteManager)
+  private async initialize(connectionString: string): Promise<void> {
+    // Initialize PostgreSQL connection
+    this.postgresManager = new PostgresManager(this.application, this.logger, connectionString)
+    await this.postgresManager.initialize()
 
+    // Set up database migrations
+    initializeCoreDatabase(this.postgresManager)
+    await this.postgresManager.migrate()
+
+    // Initialize configurations manager and load all configs into cache
+    this.configurationsManager = new ConfigurationsManager(this.postgresManager)
+    await this.configurationsManager.init()
+
+    // Now initialize all the components that depend on configurations
     this.discordConfigurations = new DiscordConfigurations(this.configurationsManager)
-    this.discordLeaderboards = new DiscordLeaderboards(this.sqliteManager)
+    this.discordLeaderboards = new DiscordLeaderboards(this.postgresManager)
     this.discordTemporarilyInteractions = new DiscordTemporarilyInteractions(
-      this.sqliteManager,
+      this.postgresManager,
       this.discordConfigurations
     )
-    this.discordEmojis = new DiscordEmojis(this.sqliteManager)
+    this.discordEmojis = new DiscordEmojis(this.postgresManager)
 
     this.applicationConfigurations = new ApplicationConfigurations(this.configurationsManager)
     this.languageConfigurations = new LanguageConfigurations(this.configurationsManager)
     this.commandsConfigurations = new CommandsConfigurations(this.configurationsManager)
 
     this.minecraftConfigurations = new MinecraftConfigurations(this.configurationsManager)
-    this.minecraftSessions = new SessionsManager(this.sqliteManager, this.logger)
-    this.minecraftAccounts = new MinecraftAccounts(this.sqliteManager)
+    this.minecraftSessions = new SessionsManager(this.postgresManager, this.logger)
+    this.minecraftAccounts = new MinecraftAccounts(this.postgresManager)
 
     this.moderationConfiguration = new ModerationConfigurations(this.configurationsManager)
-    this.mojangApi = new MojangApi(this.sqliteManager)
+    this.mojangApi = new MojangApi(this.postgresManager)
 
     this.profanity = new Profanity(this.moderationConfiguration)
-    this.punishments = new Punishments(this.sqliteManager, application, this.logger)
-    this.commandsHeat = new CommandsHeat(this.sqliteManager, this.moderationConfiguration, this.logger)
-    this.enforcer = new PunishmentsEnforcer(application, this, this.eventHelper, this.logger, this.errorHandler)
+    this.punishments = new Punishments(this.postgresManager, this.application, this.logger)
+    this.commandsHeat = new CommandsHeat(this.postgresManager, this.moderationConfiguration, this.logger)
+    this.enforcer = new PunishmentsEnforcer(this.application, this, this.eventHelper, this.logger, this.errorHandler)
 
-    this.guildManager = new GuildManager(application, this, this.eventHelper, this.logger, this.errorHandler)
+    this.guildManager = new GuildManager(this.application, this, this.eventHelper, this.logger, this.errorHandler)
     this.autoComplete = new Autocomplete(
-      application,
+      this.application,
       this,
       this.eventHelper,
       this.logger,
       this.errorHandler,
-      this.sqliteManager
+      this.postgresManager
     )
 
-    this.verification = new Verification(this.sqliteManager)
+    this.verification = new Verification(this.postgresManager)
     this.scoresManager = new ScoresManager(
-      application,
+      this.application,
       this,
       this.eventHelper,
       this.logger,
       this.errorHandler,
-      this.sqliteManager
+      this.postgresManager
     )
+
+    // Wait for punishments to be ready
+    await this.punishments.ready
   }
 
   public completeUsername(query: string, limit: number): string[] {
@@ -143,12 +160,12 @@ export class Core extends Instance<InstanceType.Core> {
     return this.profanity.filterProfanity(message)
   }
 
-  public allPunishments(): SavedPunishment[] {
-    return this.punishments.all()
+  public async allPunishments(): Promise<SavedPunishment[]> {
+    return await this.punishments.all()
   }
 
   public async awaitReady(): Promise<void> {
-    await this.punishments.ready
+    await this.initPromise
   }
 
   /**

@@ -1,0 +1,25 @@
+import DefaultAxios from 'axios'
+
+import type { ChatCommandContext } from '../../../common/commands.js'
+import { ChatCommandHandler } from '../../../common/commands.js'
+
+export default class Chicken extends ChatCommandHandler {
+  constructor() {
+    super({
+      triggers: ['chicken', 'chickens'],
+      description: 'Returns a random cute chicken image URL',
+      example: `chicken`
+    })
+  }
+
+  async handler(context: ChatCommandContext): Promise<string> {
+    const response = await DefaultAxios.get<{ url?: string }>('https://imgs.kath.lol/chicken', { timeout: 5000 }).catch(() => undefined)
+
+    if (!response || response.status !== 200 || !response.data?.url) {
+      return `${context.username}, failed to fetch chicken image. Try again later.`
+    }
+
+    return `${context.username}, here's a chicken: ${response.data.url}`
+  }
+}
+

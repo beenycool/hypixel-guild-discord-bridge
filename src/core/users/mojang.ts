@@ -3,9 +3,9 @@ import assert from 'node:assert'
 import DefaultAxios, { AxiosError, HttpStatusCode } from 'axios'
 import PromiseQueue from 'promise-queue'
 
-import type { SqliteManager } from '../../common/sqlite-manager'
-import type { MojangProfile } from '../../common/user'
-import RateLimiter from '../../utility/rate-limiter'
+import type { PostgresManager } from '../../common/postgres-manager.js'
+import type { MojangProfile } from '../../common/user.js'
+import RateLimiter from '../../utility/rate-limiter.js'
 
 export class MojangApi {
   private static readonly RetryCount = 3
@@ -14,12 +14,12 @@ export class MojangApi {
 
   private readonly mojangDatabase: MojangDatabase
 
-  constructor(private readonly sqliteManager: SqliteManager) {
-    this.mojangDatabase = new MojangDatabase(this.sqliteManager)
+  constructor(private readonly postgresManager: PostgresManager) {
+    this.mojangDatabase = new MojangDatabase(this.postgresManager)
   }
 
   async profileByUsername(username: string): Promise<MojangProfile> {
-    const cachedResult = this.mojangDatabase.profileByUsername(username)
+    const cachedResult = await this.mojangDatabase.profileByUsername(username)
     if (cachedResult) return cachedResult
 
     const result = await this.queue.add(async () => {
@@ -42,14 +42,14 @@ export class MojangApi {
       throw lastError ?? new Error('Failed fetching new data')
     })
 
-    this.cache([result])
+    await this.cache([result])
     return result
   }
 
   async profileByUuid(uuid: string): Promise<MojangProfile> {
     assert.ok(uuid.length === 32 || uuid.length === 36, `'uuid' must be valid UUID. given ${uuid}`)
 
-    const cachedResult = this.mojangDatabase.profileByUuid(uuid)
+    const cachedResult = await this.mojangDatabase.profileByUuid(uuid)
     if (cachedResult) return cachedResult
 
     const result = await this.queue.add(async () => {
@@ -73,7 +73,7 @@ export class MojangApi {
       throw lastError ?? new Error('Failed fetching new data')
     })
 
-    this.cache([result])
+    await this.cache([result])
     return result
   }
 
@@ -105,7 +105,7 @@ export class MojangApi {
     const chunkSize = 10 // Mojang only allow up to 10 usernames per lookup
     let chunk: string[] = []
     for (const username of usernames) {
-      const cachedProfile = this.mojangDatabase.profileByUsername(username)
+      const cachedProfile = await this.mojangDatabase.profileByUsername(username)
       if (cachedProfile !== undefined) {
         result.set(username, cachedProfile.id)
         continue
@@ -124,8 +124,8 @@ export class MojangApi {
     return result
   }
 
-  public cache(profiles: MojangProfile[]): void {
-    this.mojangDatabase.add(profiles)
+  public async cache(profiles: MojangProfile[]): Promise<void> {
+    await this.mojangDatabase.add(profiles)
   }
 
   private async lookupUsernames(usernames: string[]): Promise<MojangProfile[]> {
@@ -149,7 +149,7 @@ export class MojangApi {
       throw lastError ?? new Error('Failed fetching new data')
     })
 
-    this.cache(result)
+    await this.cache(result)
     return result
   }
 }
@@ -157,41 +157,39 @@ export class MojangApi {
 class MojangDatabase {
   private static readonly MaxAge = 7 * 24 * 60 * 60 * 1000
 
-  constructor(private readonly sqliteManager: SqliteManager) {}
+  constructor(private readonly postgresManager: PostgresManager) {}
 
-  public add(profiles: MojangProfile[]): void {
-    const database = this.sqliteManager.getDatabase()
-    const insert = database.prepare(
-      'INSERT OR REPLACE INTO "mojang" (uuid, username, loweredName) VALUES (@uuid, @username, @loweredName)'
-    )
-
-    const transaction = database.transaction(() => {
+  public async add(profiles: MojangProfile[]): Promise<void> {
+    await this.postgresManager.withTransaction(async (client) => {
       for (const profile of profiles) {
-        insert.run({ uuid: profile.id, username: profile.name, loweredName: profile.name.toLowerCase() })
+        await client.query(
+          `INSERT INTO "mojang" (uuid, username, "loweredName")
+           VALUES ($1, $2, $3)
+           ON CONFLICT (uuid) DO UPDATE SET
+             username = EXCLUDED.username,
+             "loweredName" = EXCLUDED."loweredName",
+             "createdAt" = FLOOR(EXTRACT(EPOCH FROM NOW()))`,
+          [profile.id, profile.name, profile.name.toLowerCase()]
+        )
       }
     })
-
-    transaction()
   }
 
-  public profileByUsername(username: string): MojangProfile | undefined {
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare(
-      'SELECT uuid as id, username as name FROM "mojang" WHERE loweredName = @loweredName AND createdAt > @createdAt'
+  public async profileByUsername(username: string): Promise<MojangProfile | undefined> {
+    const result = await this.postgresManager.queryOne<{ id: string; name: string }>(
+      `SELECT uuid as id, username as name FROM "mojang"
+       WHERE "loweredName" = $1 AND "createdAt" > $2`,
+      [username.toLowerCase(), Math.floor((Date.now() - MojangDatabase.MaxAge) / 1000)]
     )
-    return select.get({
-      loweredName: username.toLowerCase(),
-      createdAt: Math.floor((Date.now() - MojangDatabase.MaxAge) / 1000)
-    }) as MojangProfile | undefined
+    return result
   }
 
-  public profileByUuid(uuid: string): MojangProfile | undefined {
-    const database = this.sqliteManager.getDatabase()
-    const select = database.prepare(
-      'SELECT uuid as id, username as name FROM "mojang" WHERE uuid = @uuid AND createdAt > @createdAt'
+  public async profileByUuid(uuid: string): Promise<MojangProfile | undefined> {
+    const result = await this.postgresManager.queryOne<{ id: string; name: string }>(
+      `SELECT uuid as id, username as name FROM "mojang"
+       WHERE uuid = $1 AND "createdAt" > $2`,
+      [uuid, Math.floor((Date.now() - MojangDatabase.MaxAge) / 1000)]
     )
-    return select.get({ uuid: uuid, createdAt: Math.floor((Date.now() - MojangDatabase.MaxAge) / 1000) }) as
-      | MojangProfile
-      | undefined
+    return result
   }
 }

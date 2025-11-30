@@ -48,7 +48,7 @@ export default {
         return
       }
 
-      context.application.core.verification.addConfirmedLink(interaction.user.id, mojangProfile.id)
+      await context.application.core.verification.addConfirmedLink(interaction.user.id, mojangProfile.id)
       await interaction.editReply('Successfully linked!')
     } catch (error: unknown) {
       if (
