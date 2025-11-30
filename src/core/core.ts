@@ -160,8 +160,8 @@ export class Core extends Instance<InstanceType.Core> {
     return this.profanity.filterProfanity(message)
   }
 
-  public allPunishments(): SavedPunishment[] {
-    return this.punishments.all()
+  public async allPunishments(): Promise<SavedPunishment[]> {
+    return await this.punishments.all()
   }
 
   public async awaitReady(): Promise<void> {

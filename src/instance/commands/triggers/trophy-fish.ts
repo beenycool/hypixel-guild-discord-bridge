@@ -7,9 +7,7 @@ import {
   playerNeverPlayedSkyblock,
   shortenNumber,
   usernameNotExists
-} from '../common/utility'
-
-const TrophyFishRanks = ['Bronze', 'Silver', 'Gold', 'Diamond']
+} from '../common/utility.js'
 
 function getTrophyFishRank(totalCaught: number): string {
   if (totalCaught >= 1000) return 'Diamond'

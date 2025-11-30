@@ -1,42 +1,6 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
-import { getUuidIfExists, playerNeverPlayedSkyblock, usernameNotExists } from '../common/utility'
-
-// Garden level XP requirements
-const GardenLevelXp = [
-  0, 70, 100, 140, 240, 600, 1500, 2000, 2500, 3000, 10_000, 10_000, 10_000, 10_000, 10_000
-]
-
-// Crop milestone XP requirements (cumulative)
-const CropMilestoneXp = [
-  0, 10, 50, 100, 200, 500, 1000, 2000, 5000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000, 1_000_000
-]
-
-function getGardenLevel(exp: number): number {
-  let level = 0
-  let remaining = exp
-  for (const xp of GardenLevelXp) {
-    if (remaining >= xp) {
-      remaining -= xp
-      level++
-    } else {
-      break
-    }
-  }
-  return level
-}
-
-function getCropMilestoneLevel(collected: number): number {
-  let level = 0
-  for (let i = 0; i < CropMilestoneXp.length; i++) {
-    if (collected >= CropMilestoneXp[i]) {
-      level = i
-    } else {
-      break
-    }
-  }
-  return level
-}
+import { getUuidIfExists, playerNeverPlayedSkyblock, usernameNotExists } from '../common/utility.js'
 
 export default class Garden extends ChatCommandHandler {
   constructor() {

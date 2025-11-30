@@ -469,11 +469,6 @@ class ScoreDatabase {
     assert.ok(from < to, '"from" timestamp is earlier than the "to" timestamp')
 
     let ignoreClause = ''
-    const params: Record<string, unknown> = {
-      toTimestamp: Math.floor(to / 1000),
-      fromTimestamp: Math.floor(from / 1000)
-    }
-
     const paramValues: unknown[] = [Math.floor(from / 1000), Math.floor(to / 1000)]
     let paramIndex = 3
 

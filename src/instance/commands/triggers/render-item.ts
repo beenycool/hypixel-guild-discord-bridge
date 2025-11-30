@@ -14,7 +14,7 @@ export default class RenderItem extends ChatCommandHandler {
 
   async handler(context: ChatCommandContext): Promise<string> {
     const args = context.args
-    let givenUsername = context.username
+    let givenUsername: string
     let slotNumber: number | undefined
 
     // Parse arguments - can be: [slot], [username slot], [username]

@@ -89,7 +89,6 @@ export function renderLore(itemName: string | undefined, lore: string[]): Buffer
     let currentColor = '#ffffff'
     let isBold = false
     let isItalic = false
-    let isObfuscated = false
     let isStrikethrough = false
     let isUnderline = false
 
@@ -105,7 +104,7 @@ export function renderLore(itemName: string | undefined, lore: string[]): Buffer
       } else if (code === 'o') {
         isItalic = true
       } else if (code === 'k') {
-        isObfuscated = true
+        // Obfuscated text (§k) is not rendered in static images
       } else if (code === 'm') {
         isStrikethrough = true
       } else if (code === 'n') {

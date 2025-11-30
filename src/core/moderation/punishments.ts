@@ -162,14 +162,7 @@ export default class Punishments {
     return this.convertDatabaseFields(result)
   }
 
-  all(): SavedPunishment[] {
-    // This is called synchronously from allPunishments() in core.ts
-    // We need to make this async or cache the results
-    // For now, return empty array and let the caller handle async
-    return []
-  }
-
-  async allAsync(): Promise<SavedPunishment[]> {
+  async all(): Promise<SavedPunishment[]> {
     const current = Date.now()
     const result = await this.getPunishments([], current)
     return this.convertDatabaseFields(result)

@@ -242,7 +242,7 @@
         "description": "Get tag information for multiple players in a single request",
         "parameters": [
           {
-            "name": "key",
+            "name": "api_key",
             "in": "query",
             "required": true,
             "schema": {
@@ -350,7 +350,7 @@
         "description": "Admin-only endpoint to add a tag to a player",
         "parameters": [
           {
-            "name": "key",
+            "name": "api_key",
             "in": "query",
             "required": true,
             "schema": {
@@ -526,7 +526,7 @@
             "description": "Player Minecraft UUID"
           },
           {
-            "name": "key",
+            "name": "api_key",
             "in": "query",
             "required": true,
             "schema": {
@@ -612,7 +612,7 @@
             "description": "Minecraft username or UUID (with or without hyphens)"
           },
           {
-            "name": "key",
+            "name": "api_key",
             "in": "query",
             "required": true,
             "schema": {
