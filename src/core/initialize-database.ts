@@ -89,9 +89,7 @@ async function migrateFrom0to1(client: PoolClient, logger: Logger, newlyCreated:
     CREATE TABLE IF NOT EXISTS "AllMembers" (
       id SERIAL PRIMARY KEY,
       uuid TEXT NOT NULL,
-      "fromDate" DATE GENERATED ALWAYS AS (to_timestamp("fromTimestamp")::date) STORED,
       "fromTimestamp" BIGINT NOT NULL,
-      "toDate" DATE GENERATED ALWAYS AS (to_timestamp("toTimestamp")::date) STORED,
       "toTimestamp" BIGINT NOT NULL,
       CONSTRAINT "timeRange" CHECK("fromTimestamp" <= "toTimestamp")
     )
@@ -100,15 +98,13 @@ async function migrateFrom0to1(client: PoolClient, logger: Logger, newlyCreated:
     CREATE TABLE IF NOT EXISTS "OnlineMembers" (
       id SERIAL PRIMARY KEY,
       uuid TEXT NOT NULL,
-      "fromDate" DATE GENERATED ALWAYS AS (to_timestamp("fromTimestamp")::date) STORED,
       "fromTimestamp" BIGINT NOT NULL,
-      "toDate" DATE GENERATED ALWAYS AS (to_timestamp("toTimestamp")::date) STORED,
       "toTimestamp" BIGINT NOT NULL,
       CONSTRAINT "timeRange" CHECK("fromTimestamp" <= "toTimestamp")
     )
   `)
-  await client.query(`CREATE INDEX IF NOT EXISTS "allMembersAppend" ON "AllMembers" (uuid, "fromDate", "toDate")`)
-  await client.query(`CREATE INDEX IF NOT EXISTS "onlineMembersAppend" ON "OnlineMembers" (uuid, "fromDate", "toDate")`)
+  await client.query(`CREATE INDEX IF NOT EXISTS "allMembersAppend" ON "AllMembers" (uuid, "fromTimestamp", "toTimestamp")`)
+  await client.query(`CREATE INDEX IF NOT EXISTS "onlineMembersAppend" ON "OnlineMembers" (uuid, "fromTimestamp", "toTimestamp")`)
 
   await setSchemaVersion(client, 1)
 }

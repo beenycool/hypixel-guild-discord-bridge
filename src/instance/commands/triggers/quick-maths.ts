@@ -7,7 +7,7 @@ import { ChatCommandHandler } from '../../../common/commands.js'
 export default class QuickMaths extends ChatCommandHandler {
   constructor() {
     super({
-      triggers: ['quickmaths', 'qm', 'math'],
+      triggers: ['quickmaths', 'qm'],
       description: 'Presents a quick math problem to solve',
       example: `qm`
     })

@@ -17,11 +17,11 @@ export class Sanitizer {
 
   constructor(application: Application) {
     this.line = new LineSanitizer()
-    this.link = new LinksSanitizer(application.core.minecraftConfigurations)
+    this.link = new LinksSanitizer(application)
     this.emoji = new EmojiSanitizer()
     this.ez = new EzSanitizer()
     this.arabicFixer = new ArabicFixer()
-    this.antispam = new Antispam(application.core.minecraftConfigurations)
+    this.antispam = new Antispam(application)
   }
 
   public async sanitizeChatMessage(instanceName: string, message: string): Promise<string> {

@@ -36,8 +36,8 @@ export class MinecraftManager extends Instance<InstanceType.Utility> {
     return Array.from(this.minecraftBots, ([, value]) => value)
   }
 
-  public loadInstances(): void {
-    const instances = this.application.core.minecraftSessions.getAllInstances()
+  public async loadInstances(): Promise<void> {
+    const instances = await this.application.core.minecraftSessions.getAllInstances()
     for (const instanceConfig of instances) {
       this.instances.add(new MinecraftInstance(this.application, instanceConfig.name, instanceConfig))
     }

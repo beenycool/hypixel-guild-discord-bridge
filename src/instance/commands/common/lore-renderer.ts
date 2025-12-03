@@ -114,7 +114,6 @@ export function renderLore(itemName: string | undefined, lore: string[]): Buffer
         currentColor = '#ffffff'
         isBold = false
         isItalic = false
-        isObfuscated = false
         isStrikethrough = false
         isUnderline = false
       } else {
@@ -177,13 +176,10 @@ export async function decodeInventoryData(base64Data: string): Promise<Inventory
     const buffer = Buffer.from(base64Data, 'base64')
     const parsed = await parse(buffer)
 
-    // Validate nested structure before accessing
-    if (
-      parsed?.parsed?.value?.i?.value?.value &&
-      Array.isArray(parsed.parsed.value.i.value.value)
-    ) {
-      // @ts-expect-error too nested - accessing NBT structure directly
-      return parsed.parsed.value.i.value.value as unknown as InventoryItem[]
+    // @ts-expect-error prismarine-nbt types are incomplete - accessing NBT structure directly
+    const items = parsed?.parsed?.value?.i?.value?.value
+    if (items && Array.isArray(items)) {
+      return items as unknown as InventoryItem[]
     }
 
     // Return empty array if structure doesn't match expected format

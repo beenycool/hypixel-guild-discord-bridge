@@ -36,7 +36,7 @@ export default class MessageDeleter {
   }
 
   public async clean(): Promise<void> {
-    const expiredInteractions = this.application.core.discordTemporarilyInteractions.findToDelete()
+    const expiredInteractions = await this.application.core.discordTemporarilyInteractions.findToDelete()
 
     const bulk = new Map<string, string[]>()
     for (const expiredInteraction of expiredInteractions) {

@@ -20,7 +20,7 @@ export default class EmojiHandler extends SubInstance<DiscordInstance, InstanceT
 
   private async registerEmojis(manager: ApplicationEmojiManager): Promise<void> {
     const registeredEmojis = await manager.fetch()
-    const savedEmojis = this.application.core.discordEmojis.getAll()
+    const savedEmojis = await this.application.core.discordEmojis.getAll()
     const toSaveEmojis: EmojiConfig[] = []
 
     for (const emoji of AllEmojis) {

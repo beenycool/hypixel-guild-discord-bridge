@@ -844,7 +844,7 @@ function fetchMinecraftOptions(application: Application): CategoryOption {
 
 async function minecraftInstancesStatus(application: Application, interaction: ButtonInteraction): Promise<boolean> {
   const config = application.core.minecraftSessions
-  const savedInstances = config.getAllInstances()
+  const savedInstances = await config.getAllInstances()
   const instances = application.minecraftManager.getAllInstances()
 
   const embed: APIEmbed = {

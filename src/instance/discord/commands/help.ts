@@ -1,5 +1,3 @@
-import assert from 'node:assert'
-
 import type {
   APIApplicationCommandSubcommandGroupOption,
   APIApplicationCommandSubcommandOption,
@@ -16,14 +14,23 @@ export default {
   getCommandBuilder: () => new SlashCommandBuilder().setName('help').setDescription('Show available commands.'),
 
   handler: async function (context) {
+    context.logger.debug(`Help command invoked in guild: ${context.interaction.guildId}`)
+    context.logger.debug(`inGuild: ${context.interaction.inGuild()}, inCachedGuild: ${context.interaction.inCachedGuild()}`)
+
     if (!context.interaction.inGuild()) {
       await context.interaction.reply({ content: 'Use this command only in a server!', flags: MessageFlags.Ephemeral })
       return
     }
 
     await context.interaction.deferReply()
-    assert.ok(context.interaction.inCachedGuild())
+    if (!context.interaction.inCachedGuild()) {
+      context.logger.warn(`Guild ${context.interaction.guildId} is not cached. This may indicate the bot was added while running.`)
+      await context.interaction.editReply({ content: 'Guild not cached. Please try again later or restart the bot.' })
+      return
+    }
+    context.logger.debug(`Fetching commands for guild: ${context.interaction.guild.name} (${context.interaction.guild.id})`)
     const guildCommands = await context.interaction.guild.commands.fetch()
+    context.logger.debug(`Found ${guildCommands.size} commands registered in this guild`)
 
     const userPermission = context.permission
     const embed = { title: 'Commands Help', description: '' } satisfies APIEmbed

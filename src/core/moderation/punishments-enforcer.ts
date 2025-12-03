@@ -89,7 +89,7 @@ export default class PunishmentsEnforcer extends SubInstance<Core, InstanceType.
 
   private async checkAndEnforce(user: MinecraftUser, types: PunishmentType[]): Promise<void> {
     const userUuid = user.mojangProfile().id
-    const punishments = user.punishments()
+    const punishments = await user.punishments()
 
     if (types.includes(PunishmentType.Ban)) {
       const longestPunishment = punishments.longestPunishment(PunishmentType.Ban)

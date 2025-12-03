@@ -115,7 +115,6 @@ export default class Application extends TypedEmitter<ApplicationEvents> impleme
     this.discordInstance = new DiscordInstance(this, this.config.discord)
 
     this.minecraftManager = new MinecraftManager(this)
-    this.minecraftManager.loadInstances()
 
     this.pluginsManager = new PluginsManager(this)
 
@@ -182,6 +181,9 @@ export default class Application extends TypedEmitter<ApplicationEvents> impleme
     // Now that core is ready, we can access mojangApi and language settings
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     ;(this as { mojangApi: MojangApi }).mojangApi = this.core.mojangApi
+
+    // Load minecraft instances now that core is ready
+    await this.minecraftManager.loadInstances()
 
     let selectedLanguage = this.core.languageConfigurations.getLanguage()
     if (!Object.values(ApplicationLanguages).includes(selectedLanguage)) {

@@ -114,7 +114,7 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
   }
 
   async onChat(event: ChatEvent): Promise<void> {
-    const channels = this.resolveChannels([event.channelType])
+    const channels = this.resolveChannels([event.channelType], event.instanceName)
     const username = event.user.displayName()
 
     for (const channelId of channels) {
@@ -164,8 +164,8 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
 
     if (event.type === GuildPlayerEventType.Mute) {
       const game =
-        event.user
-          .punishments()
+        (await event.user
+          .punishments())
           .all()
           .filter((punishment) => punishment.type === PunishmentType.Mute)
           .toSorted((a, b) => b.createdAt - a.createdAt)
@@ -183,7 +183,7 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
 
       messages = await this.sendImageToChannels(
         event.eventId,
-        this.resolveChannels(event.channels),
+        this.resolveChannels(event.channels, event.instanceName),
         this.messageToImage.generateMessageImage(formattedMessage)
       )
     } else {
@@ -199,7 +199,7 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
         color: event.color
       } satisfies APIEmbed
 
-      messages = await this.sendEmbedToChannels(event, this.resolveChannels(event.channels), embed)
+      messages = await this.sendEmbedToChannels(event, this.resolveChannels(event.channels, event.instanceName), embed)
     }
 
     if (removeLater) {
@@ -222,9 +222,9 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
 
     if (this.messageToImage.shouldRenderImage()) {
       const image = this.messageToImage.generateMessageImage(event.rawMessage)
-      await this.sendImageToChannels(event.eventId, this.resolveChannels(event.channels), image)
+      await this.sendImageToChannels(event.eventId, this.resolveChannels(event.channels, event.instanceName), image)
     } else {
-      await this.sendEmbedToChannels(event, this.resolveChannels(event.channels), undefined)
+      await this.sendEmbedToChannels(event, this.resolveChannels(event.channels, event.instanceName), undefined)
     }
   }
 
@@ -289,7 +289,7 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
     )
       return
 
-    const channels = this.resolveChannels(event.channels)
+    const channels = this.resolveChannels(event.channels, event.instanceName || "global")
     if (this.messageToImage.shouldRenderImage()) {
       let formatted: string
       switch (event.color) {
@@ -326,14 +326,31 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
     return `§4§l[§c${prefix}§4§l]§f§r ${message}`
   }
 
-  private resolveChannels(channels: ChannelType[]): string[] {
+  // =====================================================================
+  // MODIFIED: Added instanceName parameter to filter channels
+  // =====================================================================
+  private resolveChannels(channels: ChannelType[], instanceName: string): string[] {
     const config = this.application.core.discordConfigurations
 
-    const results: string[] = []
-    if (channels.includes(ChannelType.Public)) results.push(...config.getPublicChannelIds())
-    if (channels.includes(ChannelType.Officer)) results.push(...config.getOfficerChannelIds())
+    // !!! CONFIGURE YOUR ROUTING HERE !!!
+    // Format: "MinecraftInstanceName": ["DiscordChannelID", "AnotherChannelID"]
+    const channelMapping: Record<string, string[]> = {
+      "MyFirstGuildName": ["111111111111111111", "222222222222222222"],
+      "MySecondGuildName": ["333333333333333333", "444444444444444444"]
+    }
 
-    return results
+    const allChannels: string[] = []
+    if (channels.includes(ChannelType.Public)) allChannels.push(...config.getPublicChannelIds())
+    if (channels.includes(ChannelType.Officer)) allChannels.push(...config.getOfficerChannelIds())
+
+    // If the instance exists in our map, return ONLY the intersection
+    // of (All Configured Channels) AND (Mapped Channels)
+    if (channelMapping[instanceName]) {
+      return allChannels.filter(id => channelMapping[instanceName].includes(id))
+    }
+
+    // Fallback: If instance name not found in map, broadcast to everyone (default behavior)
+    return allChannels
   }
 
   async onCommand(event: CommandEvent): Promise<void> {

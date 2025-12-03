@@ -68,7 +68,7 @@ export default class Duels extends ChatCommandHandler {
     if (!firstKey) {
       return `${givenUsername} has no valid ${mode} duels stats.`
     }
-    const modeStats = modeData[firstKey]
+    const modeStats = modeData[firstKey] as Record<string, unknown> | null | undefined
     // Validate it's an object (not null, and typeof === 'object')
     if (modeStats == null || typeof modeStats !== 'object' || Array.isArray(modeStats)) {
       return `${givenUsername} has no valid ${mode} duels stats.`

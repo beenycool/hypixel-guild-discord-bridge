@@ -172,7 +172,7 @@ export class PostgresManager {
     return this.pool
   }
 
-  public async query<T extends Record<string, unknown> = Record<string, unknown>>(
+  public async query<T = Record<string, unknown>>(
     sql: string,
     params?: unknown[]
   ): Promise<T[]> {
@@ -180,7 +180,7 @@ export class PostgresManager {
     return result.rows as T[]
   }
 
-  public async queryOne<T extends Record<string, unknown> = Record<string, unknown>>(
+  public async queryOne<T = Record<string, unknown>>(
     sql: string,
     params?: unknown[]
   ): Promise<T | undefined> {

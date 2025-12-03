@@ -422,7 +422,7 @@ async function handleCheckInteraction(context: DiscordCommandContext, target: Us
     context.errorHandler,
     async (page: number): Promise<FetchPageResult> => {
       const thumbnail = target.avatar()
-      const punishments = target.punishments().all()
+      const punishments = (await target.punishments()).all()
 
       const result = `**${formatUser(target)} Active Punishments**\n`
       const list = await formatList(undefined, punishments, page)

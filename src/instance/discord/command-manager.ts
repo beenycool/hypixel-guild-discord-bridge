@@ -65,6 +65,12 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
       this.listenToRegisterCommands(client)
     })
 
+    // Register commands when bot joins a new guild
+    client.on('guildCreate', (guild) => {
+      this.logger.info(`Registering commands for newly joined guild: ${guild.name} (${guild.id})`)
+      this.registerCommandsForGuild(client.token!, client.application!.id, guild.id, guild.name)
+    })
+
     client.on('interactionCreate', (interaction) => {
       if (interaction.isChatInputCommand()) {
         void this.onCommand(interaction).catch(
@@ -172,6 +178,7 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
    */
   private async onCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     this.logger.debug(`${interaction.user.tag} executing ${interaction.commandName}`)
+    this.logger.debug(`Guild ID: ${interaction.guildId}, inGuild: ${interaction.inGuild()}, inCachedGuild: ${interaction.inCachedGuild()}`)
     const command = this.commands.get(interaction.commandName)
 
     try {
@@ -310,15 +317,25 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
 
     const token = client.token
     const clientId = client.application.id
-    const commandsJson = this.getCommandsJson()
 
+    this.logger.debug(`Total guilds in cache: ${client.guilds.cache.size}`)
     for (const [, guild] of client.guilds.cache) {
-      this.logger.debug(`Informing guild ${guild.id} about commands`)
-      const rest = new REST().setToken(token)
-      void rest
-        .put(Routes.applicationGuildCommands(clientId, guild.id), { body: commandsJson })
-        .catch(this.errorHandler.promiseCatch('registering discord commands'))
+      this.registerCommandsForGuild(token, clientId, guild.id, guild.name)
     }
+  }
+
+  private registerCommandsForGuild(token: string, clientId: string, guildId: string, guildName: string): void {
+    const commandsJson = this.getCommandsJson()
+    this.logger.debug(`Informing guild ${guildId} (${guildName}) about ${commandsJson.length} commands`)
+    const rest = new REST().setToken(token)
+    void rest
+      .put(Routes.applicationGuildCommands(clientId, guildId), { body: commandsJson })
+      .then(() => {
+        this.logger.debug(`Successfully registered commands for guild ${guildId} (${guildName})`)
+      })
+      .catch((error) => {
+        this.logger.error(`Failed to register commands for guild ${guildId} (${guildName}):`, error)
+      })
   }
 
   private getChannelType(channelId: string): ChannelType | undefined {

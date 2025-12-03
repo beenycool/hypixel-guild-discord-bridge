@@ -197,13 +197,13 @@ export class User {
     return result
   }
 
-  public punishments(): PunishmentInstant {
-    const punishments = this.context.punishments.findByUser(this)
+  public async punishments(): Promise<PunishmentInstant> {
+    const punishments = await this.context.punishments.findByUser(this)
     return new PunishmentInstant(this, punishments)
   }
 
-  public forgive(executor: InformEvent): SavedPunishment[] {
-    const savedPunishments = this.context.punishments.remove(this)
+  public async forgive(executor: InformEvent): Promise<SavedPunishment[]> {
+    const savedPunishments = await this.context.punishments.remove(this)
 
     this.application.emit('punishmentForgive', { ...executor, user: this })
 
@@ -243,11 +243,11 @@ export class User {
     return savedPunishment
   }
 
-  public addModerationAction(type: HeatType): HeatResult {
+  public addModerationAction(type: HeatType): Promise<HeatResult> {
     return this.context.commandsHeat.add(this, type)
   }
 
-  public tryAddModerationAction(type: HeatType): HeatResult {
+  public tryAddModerationAction(type: HeatType): Promise<HeatResult> {
     return this.context.commandsHeat.tryAdd(this, type)
   }
 

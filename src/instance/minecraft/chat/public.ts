@@ -18,7 +18,7 @@ export default {
 
       const user = await context.application.core.initializeMinecraftUser({ name: username, id: uuid }, {})
 
-      const punishments = user.punishments()
+      const punishments = await user.punishments()
       const mutedTill = punishments.punishedTill(PunishmentType.Mute)
       if (mutedTill) {
         await context.clientInstance.send(

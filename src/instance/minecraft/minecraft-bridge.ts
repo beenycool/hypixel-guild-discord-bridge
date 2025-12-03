@@ -77,8 +77,8 @@ export default class MinecraftBridge extends Bridge<MinecraftInstance> {
 
     if (event.type === GuildPlayerEventType.Mute) {
       const game =
-        event.user
-          .punishments()
+        (await event.user
+          .punishments())
           .all()
           .filter((punishment) => punishment.type === PunishmentType.Mute)
           .toSorted((a, b) => b.createdAt - a.createdAt)

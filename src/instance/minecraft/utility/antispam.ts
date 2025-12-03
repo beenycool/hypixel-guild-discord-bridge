@@ -1,6 +1,6 @@
 import StringComparison from 'string-comparison'
 
-import type { MinecraftConfigurations } from '../../../core/minecraft/minecraft-configurations'
+import type Application from '../../../application.js'
 
 export default class Antispam {
   static readonly MaxHistory = 3
@@ -9,7 +9,7 @@ export default class Antispam {
 
   private readonly history = new Map<string, string[]>()
 
-  constructor(private readonly config: MinecraftConfigurations) {}
+  constructor(private readonly application: Application) {}
 
   public process(instanceName: string, message: string): string {
     let history = this.history.get(instanceName)
@@ -18,7 +18,8 @@ export default class Antispam {
       this.history.set(instanceName, history)
     }
 
-    if (!this.config.getAntispamEnabled()) {
+    const config = this.application.core.minecraftConfigurations
+    if (!config.getAntispamEnabled()) {
       history.push(message)
       if (history.length > Antispam.MaxHistory) {
         history.splice(0, history.length - Antispam.MaxHistory)

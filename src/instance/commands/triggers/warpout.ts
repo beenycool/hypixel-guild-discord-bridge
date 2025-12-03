@@ -5,7 +5,7 @@ import { canOnlyUseIngame } from '../common/utility'
 export default class Warpout extends ChatCommandHandler {
   constructor() {
     super({
-      triggers: ['warpout', 'warp'],
+      triggers: ['warpout', 'wo'],
       description: 'Warp player out of the game (Minecraft only)',
       example: `warpout %s`
     })

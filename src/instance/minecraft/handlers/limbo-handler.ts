@@ -10,8 +10,10 @@ import type MinecraftInstance from '../minecraft-instance.js'
 export default class LimboHandler extends SubInstance<MinecraftInstance, InstanceType.Minecraft, ClientSession> {
   private static readonly DefaultTimeout = 5 * 60 * 1000
   private static readonly DefaultAcquire = 10 * 60 * 1000
+  private static readonly DebounceTime = 1000
 
   private queue = new PromiseQueue(1)
+  private lastTrigger = 0
 
   public async acquire(
     timeout: number = LimboHandler.DefaultTimeout,
@@ -56,6 +58,12 @@ export default class LimboHandler extends SubInstance<MinecraftInstance, Instanc
   }
 
   private async triggerLimbo(): Promise<void> {
+    const now = Date.now()
+    if (now - this.lastTrigger < LimboHandler.DebounceTime) {
+      this.logger.debug(`Spawn event debounced (within ${LimboHandler.DebounceTime}ms)`)
+      return
+    }
+    this.lastTrigger = now
     this.logger.debug(`Spawn event triggered. sending to limbo...`)
     await this.limbo()
   }

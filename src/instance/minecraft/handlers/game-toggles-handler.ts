@@ -48,8 +48,7 @@ export default class GameTogglesHandler extends SubInstance<MinecraftInstance, I
       const uuid = this.clientInstance.uuid()
       if (uuid === undefined) return
 
-      const config = this.getConfig(uuid)
-      this.sendToggles(config)
+      void this.getConfig(uuid).then((config) => this.sendToggles(config))
     }, GameTogglesHandler.ResendEveryMilliseconds)
 
     this.application.on('chat', (event) => {
@@ -57,12 +56,12 @@ export default class GameTogglesHandler extends SubInstance<MinecraftInstance, I
 
       const uuid = this.clientInstance.uuid()
       assert.ok(uuid !== undefined)
-      const config = this.getConfig(uuid)
-
-      if (event.channelType === ChannelType.Public || event.channelType === ChannelType.Officer) {
-        config.guildChatEnabled = true
-        this.application.core.minecraftAccounts.set(uuid, config)
-      }
+      void this.getConfig(uuid).then((config) => {
+        if (event.channelType === ChannelType.Public || event.channelType === ChannelType.Officer) {
+          config.guildChatEnabled = true
+          void this.application.core.minecraftAccounts.set(uuid, config)
+        }
+      })
     })
 
     this.application.on('minecraftChat', (event: MinecraftRawChatEvent) => {
@@ -73,39 +72,39 @@ export default class GameTogglesHandler extends SubInstance<MinecraftInstance, I
         this.logger.warn("minecraftChat event was received while the handler isn't ready yet. Ignoring this event.")
         return
       }
-      const config = this.getConfig(uuid)
+      void this.getConfig(uuid).then((config) => {
+        if (event.message.startsWith('Your online status has been set to Online')) {
+          config.playerOnlineStatusEnabled = true
+          void this.application.core.minecraftAccounts.set(uuid, config)
+        }
 
-      if (event.message.startsWith('Your online status has been set to Online')) {
-        config.playerOnlineStatusEnabled = true
-        this.application.core.minecraftAccounts.set(uuid, config)
-      }
+        if (event.message.startsWith('Enabled guild online mode!')) {
+          config.guildAllEnabled = false
+          void this.application.core.minecraftAccounts.set(uuid, config)
+        }
+        if (event.message.startsWith('Disabled guild online mode!')) {
+          config.guildAllEnabled = true
+          void this.application.core.minecraftAccounts.set(uuid, config)
+        }
 
-      if (event.message.startsWith('Enabled guild online mode!')) {
-        config.guildAllEnabled = false
-        this.application.core.minecraftAccounts.set(uuid, config)
-      }
-      if (event.message.startsWith('Disabled guild online mode!')) {
-        config.guildAllEnabled = true
-        this.application.core.minecraftAccounts.set(uuid, config)
-      }
+        if (event.message.startsWith('Enabled guild chat!')) {
+          config.guildChatEnabled = true
+          void this.application.core.minecraftAccounts.set(uuid, config)
+        }
+        if (event.message.startsWith('Disabled guild chat!')) {
+          config.guildChatEnabled = false
+          void this.application.core.minecraftAccounts.set(uuid, config)
+        }
 
-      if (event.message.startsWith('Enabled guild chat!')) {
-        config.guildChatEnabled = true
-        this.application.core.minecraftAccounts.set(uuid, config)
-      }
-      if (event.message.startsWith('Disabled guild chat!')) {
-        config.guildChatEnabled = false
-        this.application.core.minecraftAccounts.set(uuid, config)
-      }
-
-      if (event.message.startsWith('Enabled guild join/leave notifications!')) {
-        config.guildNotificationsEnabled = true
-        this.application.core.minecraftAccounts.set(uuid, config)
-      }
-      if (event.message.startsWith('Disabled guild join/leave notifications!')) {
-        config.guildNotificationsEnabled = false
-        this.application.core.minecraftAccounts.set(uuid, config)
-      }
+        if (event.message.startsWith('Enabled guild join/leave notifications!')) {
+          config.guildNotificationsEnabled = true
+          void this.application.core.minecraftAccounts.set(uuid, config)
+        }
+        if (event.message.startsWith('Disabled guild join/leave notifications!')) {
+          config.guildNotificationsEnabled = false
+          void this.application.core.minecraftAccounts.set(uuid, config)
+        }
+      })
     })
   }
 
@@ -178,10 +177,10 @@ export default class GameTogglesHandler extends SubInstance<MinecraftInstance, I
     this.readyRefresh ??= setTimeout(() => {
       const uuid = this.clientInstance.uuid()
       assert.ok(uuid !== undefined)
-      const config = this.application.core.minecraftAccounts.get(uuid)
-
-      this.ready = true
-      this.sendToggles(config) // already waited for the client to be ready
+      void this.application.core.minecraftAccounts.get(uuid).then((config) => {
+        this.ready = true
+        this.sendToggles(config) // already waited for the client to be ready
+      })
     }, GameTogglesHandler.TillReadyMilliseconds)
 
     this.readyRefresh.refresh()
@@ -193,21 +192,21 @@ export default class GameTogglesHandler extends SubInstance<MinecraftInstance, I
     assert.ok(newUuid !== undefined)
     assert.ok(username !== undefined)
 
-    const config = this.application.core.minecraftAccounts.get(newUuid)
-    if (this.allPrepared(config)) {
-      this.prepared = true
-    } else {
-      this.prepared = false
-      if (this.lastUuid === undefined) {
-        this.lastUuid = newUuid
-        this.application.emit('broadcast', {
-          ...this.eventHelper.fillBaseEvent(),
+    void this.application.core.minecraftAccounts.get(newUuid).then((config) => {
+      if (this.allPrepared(config)) {
+        this.prepared = true
+      } else {
+        this.prepared = false
+        if (this.lastUuid === undefined) {
+          this.lastUuid = newUuid
+          this.application.emit('broadcast', {
+            ...this.eventHelper.fillBaseEvent(),
 
-          channels: [ChannelType.Public],
-          color: Color.Info,
+            channels: [ChannelType.Public],
+            color: Color.Info,
 
-          user: undefined,
-          message:
+            user: undefined,
+            message:
             `Minecraft account ${username}/${newUuid} is not prepared to be used in the application yet.\n` +
             'Application will run through a discovery phase for one minute to prepare the account. ' +
             'In the mean time, communication and messages might be experience interruptions. ' +
@@ -215,9 +214,10 @@ export default class GameTogglesHandler extends SubInstance<MinecraftInstance, I
         })
       }
     }
+    })
   }
 
-  private getConfig(currentUuid: string): GameToggleConfig {
+  private async getConfig(currentUuid: string): Promise<GameToggleConfig> {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     assert.ok(currentUuid !== undefined)
 
@@ -228,7 +228,7 @@ export default class GameTogglesHandler extends SubInstance<MinecraftInstance, I
       )
     }
 
-    this.config ??= this.application.core.minecraftAccounts.get(currentUuid)
+    this.config ??= await this.application.core.minecraftAccounts.get(currentUuid)
     return this.config
   }
 }
