@@ -87,18 +87,14 @@ export const InactivityConfig = t.iface([], {
   "channelIds": t.array("string"),
 });
 
-export const SkyblockEventsNotifiers = t.iface([], {
-  [t.indexKey]: "boolean",
-});
-
-export const SkyblockEventCustomTimes = t.iface([], {
-  [t.indexKey]: t.array("string"),
-});
-
 export const SkyblockEventsConfig = t.iface([], {
   "enabled": "boolean",
-  "notifiers": t.opt("SkyblockEventsNotifiers"),
-  "customTimes": t.opt("SkyblockEventCustomTimes"),
+  "notifiers": t.opt(t.iface([], {
+    [t.indexKey]: "boolean",
+  })),
+  "customTimes": t.opt(t.iface([], {
+    [t.indexKey]: t.array("string"),
+  })),
 });
 
 export const HypixelUpdatesConfig = t.iface([], {
@@ -109,6 +105,15 @@ export const HypixelUpdatesConfig = t.iface([], {
   "alphaPlayerCount": t.opt("boolean"),
   "pollIntervalMinutes": t.opt("number"),
   "alphaCheckIntervalMinutes": t.opt("number"),
+});
+
+export const BridgeConfig = t.iface([], {
+  "id": "string",
+  "minecraftInstanceNames": t.array("string"),
+  "discord": t.iface([], {
+    "publicChannelIds": t.array("string"),
+    "officerChannelIds": t.array("string"),
+  }),
 });
 
 export const ApplicationConfig = t.iface([], {
@@ -123,6 +128,7 @@ export const ApplicationConfig = t.iface([], {
   "inactivity": t.opt("InactivityConfig"),
   "skyblockEvents": t.opt("SkyblockEventsConfig"),
   "hypixelUpdates": t.opt("HypixelUpdatesConfig"),
+  "bridges": t.opt(t.array("BridgeConfig")),
 });
 
 const exportedTypeSuite: t.ITypeSuite = {
@@ -138,10 +144,9 @@ const exportedTypeSuite: t.ITypeSuite = {
   GuildRequirementsThresholds,
   GuildRequirementsConfig,
   InactivityConfig,
-  SkyblockEventsNotifiers,
-  SkyblockEventCustomTimes,
   SkyblockEventsConfig,
   HypixelUpdatesConfig,
+  BridgeConfig,
   ApplicationConfig,
 };
 export default exportedTypeSuite;
