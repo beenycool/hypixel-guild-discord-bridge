@@ -172,7 +172,7 @@ export function getForgeItems(profile: SkyblockV2Member): ForgeItemSummary[] | n
   const processes = Object.values(forgeData)
   if (processes.length === 0) return []
 
-  const quickForge = (profile as ForgeProfile).mining_core?.nodes?.forge_time
+  const quickForge = (profile as any).mining_core?.nodes?.forge_time
   const multiplier = quickForge ? (QuickForgeMultiplier[quickForge] ?? 1) : 1
 
   return processes.map((process) => {

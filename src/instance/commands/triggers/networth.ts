@@ -38,7 +38,11 @@ export default class Networth extends ChatCommandHandler {
     const museumMember = museum?.members?.[uuid]
 
     const bankingBalance = selected.profile.banking?.balance ?? 0
-    const networthManager = new ProfileNetworthCalculator(selected.member, museumMember, bankingBalance)
+    const networthManager = new ProfileNetworthCalculator(
+      selected.member as any,
+      museumMember as any,
+      bankingBalance
+    )
 
     const [networthData, nonCosmeticNetworthData] = await Promise.all([
       networthManager.getNetworth({ onlyNetworth: true }),

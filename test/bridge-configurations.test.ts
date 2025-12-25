@@ -14,7 +14,7 @@ const logger = {
   info: () => {},
   warn: () => {},
   error: () => {}
-} as unknown as Parameters<typeof SqliteManager>[1]
+} as unknown as ConstructorParameters<typeof SqliteManager>[1]
 
 // Minimal fake application with expected hooks used by SqliteManager and migrations
 const fakeApp: any = {

@@ -10,7 +10,7 @@ function writeTemporaryYaml(content: string): string {
   return temporary
 }
 
-function buildMinimalConfig(adminIds: string | number[]) {
+function buildMinimalConfig(adminIds: string[] | number[]) {
   return `version: 2
 general:
   hypixelApiKey: "test-key"

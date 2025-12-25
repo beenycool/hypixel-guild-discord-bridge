@@ -22,7 +22,7 @@ export class SkyblockInstant {
   public static readonly YearInMillisecond = this.MonthsCount * this.MonthInMillisecond
   private static readonly Year0 = 1_560_275_700_000
 
-  public static toSkyblockInstant(timestamp: number): SkyblockInstant {
+  public static toSkyblockInstant(timestamp: number): InstantOptions {
     this.assertValidSkyblockTimestamp(timestamp)
 
     const currentEpoch = timestamp - this.Year0

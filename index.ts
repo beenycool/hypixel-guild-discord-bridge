@@ -94,6 +94,7 @@ if (process.env.CONFIG_B64) {
     Logger.fatal('Failed to decode CONFIG_B64 environment variable')
     Logger.fatal(err)
     await gracefullyExitProcess(1)
+    throw new Error('Process should have exited')
   }
 } else if (process.env.CONFIG) {
   Logger.info('Loading configuration from environment variable "CONFIG"')
@@ -103,6 +104,7 @@ if (process.env.CONFIG_B64) {
     Logger.fatal('Failed to parse CONFIG environment variable')
     Logger.fatal(err)
     await gracefullyExitProcess(1)
+    throw new Error('Process should have exited')
   }
 } else {
   if (!fs.existsSync(File)) {
@@ -110,6 +112,7 @@ if (process.env.CONFIG_B64) {
     Logger.fatal(`You can rename config_example.yaml to config.yaml and use it as the configuration file.`)
     Logger.fatal(`If this is the first time running the application, please read README.md before proceeding.`)
     await gracefullyExitProcess(1)
+    throw new Error('Process should have exited')
   }
   config = loadApplicationConfig(File)
 }

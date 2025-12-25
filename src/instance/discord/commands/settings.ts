@@ -141,22 +141,25 @@ function createBridgeOption(
   const bridgeConfig = application.core.bridgeConfigurations
 
   // Dynamic Skyblock options for per-event toggling
-  const skyblockEventOptions = SkyblockEventKeys.map((key) => ({
-    type: OptionType.Boolean,
-    // name typed as any to satisfy Option typing (key is a constant string union)
-    name: key as any,
-    description: `Enable notifications for ${key}`,
-    getOption: () => bridgeConfig.getSkyblockEventNotifiers(bridgeId)?.[key] ?? true,
-    toggleOption: () => {
-      const current = bridgeConfig.getSkyblockEventNotifiers(bridgeId) ?? {}
-      bridgeConfig.setSkyblockEventNotifier(bridgeId, key, !(current[key] ?? true))
-      application.emit('bridgeConfigChanged', {
-        bridgeId,
-        key: `${bridgeId}_skyblockNotifiers`,
-        value: { [key]: !(current[key] ?? true) }
-      })
-    }
-  }))
+  const skyblockEventOptions = SkyblockEventKeys.map(
+    (key) =>
+      ({
+        type: OptionType.Boolean,
+        // name typed as any to satisfy Option typing (key is a constant string union)
+        name: key as any,
+        description: `Enable notifications for ${key}`,
+        getOption: () => bridgeConfig.getSkyblockEventNotifiers(bridgeId)?.[key] ?? true,
+        toggleOption: () => {
+          const current = bridgeConfig.getSkyblockEventNotifiers(bridgeId) ?? {}
+          bridgeConfig.setSkyblockEventNotifier(bridgeId, key, !(current[key] ?? true))
+          application.emit('bridgeConfigChanged', {
+            bridgeId,
+            key: `${bridgeId}_skyblockNotifiers`,
+            value: { [key]: !(current[key] ?? true) }
+          })
+        }
+      }) satisfies BooleanOption as BooleanOption
+  )
 
   return {
     type: OptionType.Category,

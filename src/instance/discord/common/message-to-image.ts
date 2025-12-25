@@ -68,8 +68,10 @@ export default class MessageToImage {
     // Delegate to the chat-bridge renderer for exact parity, falling back to the
     // local renderer on error.
     try {
-      const { pathToFileURL } = await import('url')
-      const modulePath = pathToFileURL(new URL('../../../../hypixel-discord-chat-bridge/src/contracts/messageToImage.js', import.meta.url)).href
+      const modulePath = new URL(
+        '../../../../hypixel-discord-chat-bridge/src/contracts/messageToImage.js',
+        import.meta.url
+      ).href
       const mod = await import(modulePath)
       const generate = (mod.default ?? mod) as unknown as (message: string, username?: string) => Promise<Buffer>
       return await generate(message, options?.username)

@@ -1,3 +1,5 @@
+import { describe, test } from 'node:test'
+import assert from 'node:assert'
 import {
   calculateSimilarityScore,
   ChatCommandHandler,
@@ -32,46 +34,46 @@ const mockCommands = [
   new TestCommand(['networth'])
 ]
 
-describe('Typo Detection and Suggestion', () => {
-  test('should find exact matches', () => {
+void describe('Typo Detection and Suggestion', () => {
+  void test('should find exact matches', () => {
     const suggestions = getCommandSuggestions(mockCommands, 'help')
-    expect(suggestions.length).toBe(1)
-    expect(suggestions[0].command.triggers).toContain('help')
-    expect(suggestions[0].score).toBe(100)
+    assert.strictEqual(suggestions.length, 1)
+    assert.ok(suggestions[0].command.triggers.includes('help'))
+    assert.strictEqual(suggestions[0].score, 100)
   })
 
-  test('should suggest similar commands for typos', () => {
+  void test('should suggest similar commands for typos', () => {
     const suggestions = getCommandSuggestions(mockCommands, 'helps')
-    expect(suggestions.length).toBeGreaterThan(0)
-    expect(suggestions[0].command.triggers).toContain('help')
+    assert.ok(suggestions.length > 0)
+    assert.ok(suggestions[0].command.triggers.includes('help'))
   })
 
-  test('should suggest similar commands for partial matches', () => {
+  void test('should suggest similar commands for partial matches', () => {
     const suggestions = getCommandSuggestions(mockCommands, 'play')
-    expect(suggestions.length).toBeGreaterThan(0)
-    expect(suggestions[0].command.triggers).toContain('player')
+    assert.ok(suggestions.length > 0)
+    assert.ok(suggestions[0].command.triggers.includes('player'))
   })
 
-  test('should get closest command', () => {
+  void test('should get closest command', () => {
     const closest = getClosestCommand(mockCommands, 'skil')
-    expect(closest).not.toBeNull()
-    expect(closest?.command.triggers).toContain('skills')
+    assert.notStrictEqual(closest, null)
+    assert.ok(closest?.command.triggers.includes('skills'))
   })
 
-  test('should calculate similarity scores correctly', () => {
-    expect(calculateSimilarityScore('help', 'help')).toBe(1)
-    expect(calculateSimilarityScore('hel', 'help')).toBeGreaterThan(0.5)
-    expect(calculateSimilarityScore('xyz', 'help')).toBeLessThan(0.3)
+  void test('should calculate similarity scores correctly', () => {
+    assert.strictEqual(calculateSimilarityScore('help', 'help'), 1)
+    assert.ok(calculateSimilarityScore('hel', 'help') > 0.5)
+    assert.ok(calculateSimilarityScore('xyz', 'help') < 0.3)
   })
 
-  test('should return null for no close matches', () => {
+  void test('should return null for no close matches', () => {
     const closest = getClosestCommand(mockCommands, 'nonexistentcommand123')
-    expect(closest).toBeNull()
+    assert.strictEqual(closest, null)
   })
 
-  test('should handle case insensitivity', () => {
+  void test('should handle case insensitivity', () => {
     const suggestions = getCommandSuggestions(mockCommands, 'HELP')
-    expect(suggestions.length).toBe(1)
-    expect(suggestions[0].command.triggers).toContain('help')
+    assert.strictEqual(suggestions.length, 1)
+    assert.ok(suggestions[0].command.triggers.includes('help'))
   })
 })

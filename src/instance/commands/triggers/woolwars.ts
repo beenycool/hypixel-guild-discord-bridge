@@ -20,7 +20,7 @@ export default class Woolwars extends ChatCommandHandler {
     const player = await context.app.hypixelApi.getPlayer(uuid, {}).catch(() => undefined)
     if (player == undefined) return playerNeverPlayedHypixel(context, givenUsername)
 
-    const stats = player.stats?.woolwars as
+    const stats = (player.stats as any)?.woolwars as
       | {
           level?: number
           stats?: { overall?: Record<string, number> }

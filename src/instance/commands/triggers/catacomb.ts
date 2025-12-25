@@ -53,8 +53,8 @@ export default class Catacomb extends ChatCommandHandler {
       .map((entry) => `${formatNumber(entry.level, 2)}${entry.className[0].toUpperCase()}`)
       .join(', ')
 
-    const selectedClass = titleCase(dungeons.selected_dungeon_class ?? 'none')
-    const secretsFound = dungeons.secrets ?? 0
+    const selectedClass = titleCase((dungeons as any).selected_dungeon_class ?? 'none')
+    const secretsFound = (dungeons as any).secrets ?? 0
 
     return (
       `${givenUsername}'s Catacombs: ${formatNumber(catacombsLevel, 2)} | ` +
