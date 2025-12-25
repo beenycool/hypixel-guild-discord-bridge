@@ -16,7 +16,7 @@ export function loadApplicationConfig(filepath: fs.PathOrFileDescriptor): Applic
 
 export function parseApplicationConfig(fileString: string): ApplicationConfig {
   // Substitute environment variables in the form of ${VAR_NAME}
-  const substitutedString = fileString.replace(/\${(\w+)}/g, (match, p1) => {
+  const substitutedString = fileString.replaceAll(/\${(\w+)}/g, (match, p1) => {
     return process.env[p1] ?? match
   })
 

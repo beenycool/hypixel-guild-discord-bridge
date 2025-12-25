@@ -53,9 +53,7 @@ export default class Skyblock extends ChatCommandHandler {
     const dungeons = selected.member.dungeons
     const catacombsExperience = (dungeons as any)?.dungeon_types?.catacombs?.experience ?? 0
     const catacombsLevel = getLevelByXp(catacombsExperience, { type: 'dungeoneering' }).levelWithProgress
-    const classAverage = (dungeons as any)?.player_classes
-      ? formatClassAverage((dungeons as any).player_classes)
-      : 0
+    const classAverage = (dungeons as any)?.player_classes ? formatClassAverage((dungeons as any).player_classes) : 0
 
     const magicalPower = selected.member.accessory_bag_storage?.highest_magical_power ?? 0
     const hotmExperience = (selected.member as any).mining_core?.experience ?? 0
@@ -68,11 +66,7 @@ export default class Skyblock extends ChatCommandHandler {
     const museumMember = museum?.members?.[uuid]
 
     let networth = 'N/A'
-    const networthManager = new ProfileNetworthCalculator(
-      selected.member as any,
-      museumMember as any,
-      bankBalance
-    )
+    const networthManager = new ProfileNetworthCalculator(selected.member as any, museumMember as any, bankBalance)
     const networthData = await networthManager.getNetworth({ onlyNetworth: true }).catch(() => undefined)
     if (networthData && !networthData.noInventory) {
       networth = formatNumber(networthData.networth)

@@ -249,37 +249,37 @@ export class OptionsHandler {
           this.rebuildIds()
 
           // Check if the message interaction is still valid before trying to update
-          if (messageInteraction.deferred || messageInteraction.replied) {
-            await this.updateView()
-          } else {
-            await messageInteraction.update({
-              components: [
-                new ViewBuilder(
-                  this.mainCategory,
-                  this.ids,
-                  this.path,
-                  this.enabled,
-                  this.searchQuery,
-                  this.pages.get(this.getPathKey()) ?? 0,
-                  DEFAULT_PAGE_SIZE
-                ).create()
-              ],
-              flags: MessageFlags.IsComponentsV2,
-              allowedMentions: { parse: [] }
-            })
-          }
+          await (messageInteraction.deferred || messageInteraction.replied
+            ? this.updateView()
+            : messageInteraction.update({
+                components: [
+                  new ViewBuilder(
+                    this.mainCategory,
+                    this.ids,
+                    this.path,
+                    this.enabled,
+                    this.searchQuery,
+                    this.pages.get(this.getPathKey()) ?? 0,
+                    DEFAULT_PAGE_SIZE
+                  ).create()
+                ],
+                flags: MessageFlags.IsComponentsV2,
+                allowedMentions: { parse: [] }
+              }))
         })
         .catch((error) => {
           // Log the error but don't try to acknowledge the interaction again
           errorHandler.promiseCatch('updating container')(error)
           // If interaction is still valid, try to update it with error state
           if (!messageInteraction.deferred && !messageInteraction.replied) {
-            messageInteraction.update({
-              components: [],
-              flags: MessageFlags.IsComponentsV2
-            }).catch(() => {
-              // Ignore errors when trying to clean up failed interactions
-            })
+            messageInteraction
+              .update({
+                components: [],
+                flags: MessageFlags.IsComponentsV2
+              })
+              .catch(() => {
+                // Ignore errors when trying to clean up failed interactions
+              })
           }
         })
     })
@@ -338,7 +338,7 @@ export class OptionsHandler {
         flags: MessageFlags.IsComponentsV2,
         allowedMentions: { parse: [] }
       })
-    } catch (error) {
+    } catch {
       // If the message was deleted or we can't edit it, just log and continue
       // Could not update original reply, message might have been deleted
     }

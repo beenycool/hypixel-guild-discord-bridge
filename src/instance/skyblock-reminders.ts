@@ -63,7 +63,10 @@ export class SkyblockReminders extends Instance<InstanceType.Utility> {
 
             const message = bridgeId
               ? bridgeConfig
-                  .getDarkAuctionReminderMessage(bridgeId, this.application.core.languageConfigurations.getDarkAuctionReminder())
+                  .getDarkAuctionReminderMessage(
+                    bridgeId,
+                    this.application.core.languageConfigurations.getDarkAuctionReminder()
+                  )
                   .replaceAll('{minutes}', remainingMinutes.toString(10))
               : this.application.core.languageConfigurations
                   .getDarkAuctionReminder()
@@ -114,7 +117,10 @@ export class SkyblockReminders extends Instance<InstanceType.Utility> {
             if (!enabled) continue
 
             const message = bridgeId
-              ? bridgeConfig.getStarfallReminderMessage(bridgeId, this.application.core.languageConfigurations.getStarfallReminder())
+              ? bridgeConfig.getStarfallReminderMessage(
+                  bridgeId,
+                  this.application.core.languageConfigurations.getStarfallReminder()
+                )
               : this.application.core.languageConfigurations.getStarfallReminder()
 
             await this.application.emit('broadcast', {

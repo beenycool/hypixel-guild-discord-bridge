@@ -24,7 +24,7 @@ import Duration from '../../../utility/duration'
 import { SkyblockEventKeys } from '../../../utility/skyblock-calendar'
 import { Timeout } from '../../../utility/timeout.js'
 import { DefaultCommandFooter } from '../common/discord-config.js'
-import type { CategoryOption, EmbedCategoryOption } from '../utility/options-handler.js'
+import type { BooleanOption, CategoryOption, EmbedCategoryOption } from '../utility/options-handler.js'
 import { InputStyle, OptionsHandler, OptionType } from '../utility/options-handler.js'
 
 const Essential = ':shield:'

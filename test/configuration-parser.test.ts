@@ -48,9 +48,9 @@ console.log('PASS: parseApplicationConfig works')
 
 // Test environment variable substitution
 process.env.TEST_KEY = 'env-test-key'
-const envYaml = buildMinimalConfig(['123']).replace('test-key', '${TEST_KEY}')
-const envConfig = parseApplicationConfig(envYaml)
-if (envConfig.general.hypixelApiKey !== 'env-test-key') throw new Error('env var substitution failed')
+const environmentYaml = buildMinimalConfig(['123']).replace('test-key', '${TEST_KEY}')
+const environmentConfig = parseApplicationConfig(environmentYaml)
+if (environmentConfig.general.hypixelApiKey !== 'env-test-key') throw new Error('env var substitution failed')
 console.log('PASS: environment variable substitution works')
 
 console.log('All configuration-parser tests passed')

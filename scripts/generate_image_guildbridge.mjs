@@ -1,7 +1,8 @@
-import fs from 'fs'
+import fs from 'node:fs'
+
 import MessageToImage from '../src/instance/discord/common/message-to-image.ts'
 
-(async () => {
+;(async () => {
   try {
     const message = '§bGuild > §b[MVP+] DuckySoSkilled §2[Staff]§f: §aHello §bworld §r{skin}'
     const username = 'DuckySoSkilled'
@@ -9,11 +10,11 @@ import MessageToImage from '../src/instance/discord/common/message-to-image.ts'
     const m = new MessageToImage({})
     const buffer = m.generateMessageImageSync(message, { username })
 
-    const out = new URL('./guildbridge.png', import.meta.url)
+    const out = new URL('guildbridge.png', import.meta.url)
     fs.writeFileSync(out.pathname, buffer)
     console.log('guildbridge.png written', out.pathname)
-  } catch (err) {
-    console.error(err)
+  } catch (error) {
+    console.error(error)
     process.exit(1)
   }
 })()

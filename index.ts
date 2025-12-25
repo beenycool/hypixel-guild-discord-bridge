@@ -90,9 +90,9 @@ if (process.env.CONFIG_B64) {
   try {
     const decoded = Buffer.from(process.env.CONFIG_B64, 'base64').toString('utf8')
     config = parseApplicationConfig(decoded)
-  } catch (err) {
+  } catch (error) {
     Logger.fatal('Failed to decode CONFIG_B64 environment variable')
-    Logger.fatal(err)
+    Logger.fatal(error)
     await gracefullyExitProcess(1)
     throw new Error('Process should have exited')
   }
@@ -100,9 +100,9 @@ if (process.env.CONFIG_B64) {
   Logger.info('Loading configuration from environment variable "CONFIG"')
   try {
     config = parseApplicationConfig(process.env.CONFIG)
-  } catch (err) {
+  } catch (error) {
     Logger.fatal('Failed to parse CONFIG environment variable')
-    Logger.fatal(err)
+    Logger.fatal(error)
     await gracefullyExitProcess(1)
     throw new Error('Process should have exited')
   }

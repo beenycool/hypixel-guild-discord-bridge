@@ -72,10 +72,13 @@ export default class MessageToImage {
         '../../../../hypixel-discord-chat-bridge/src/contracts/messageToImage.js',
         import.meta.url
       ).href
-      const mod = await import(modulePath)
-      const generate = (mod.default ?? mod) as unknown as (message: string, username?: string) => Promise<Buffer>
+      const module_ = await import(modulePath)
+      const generate = (module_.default ?? module_) as unknown as (
+        message: string,
+        username?: string
+      ) => Promise<Buffer>
       return await generate(message, options?.username)
-    } catch (err) {
+    } catch {
       // Fallback to local rendering if import fails
       const canvasHeight = this.getHeight(message)
       const canvas = createCanvas(1000, canvasHeight)
