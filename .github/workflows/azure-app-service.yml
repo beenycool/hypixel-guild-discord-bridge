@@ -38,7 +38,6 @@ jobs:
         run: |
           mkdir -p deploy
           cp -r src deploy/
-          cp -r config deploy/
           cp -r resources deploy/
           cp -r plugins deploy/
           cp -r node_modules deploy/
