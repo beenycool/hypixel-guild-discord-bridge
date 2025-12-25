@@ -18,6 +18,9 @@ type DuelType =
   | 'bridge'
   | 'nodebuff'
   | 'bow'
+  | 'skywars'
+  | 'quake'
+  | 'bedwars'
 
 export default class Duels extends ChatCommandHandler {
   private static readonly ValidDuelTypes: readonly DuelType[] = [
@@ -35,13 +38,37 @@ export default class Duels extends ChatCommandHandler {
     'combo',
     'bridge',
     'nodebuff',
-    'bow'
+    'bow',
+    'skywars',
+    'quake',
+    'bedwars'
   ]
+
+  private static readonly DuelDisplayNames: Record<DuelType, string> = {
+    blitz: 'Blitz',
+    uhc: 'UHC',
+    parkour: 'Parkour',
+    boxing: 'Boxing',
+    bowspleef: 'Bow Spleef',
+    spleef: 'Spleef',
+    arena: 'Arena',
+    megawalls: 'MegaWalls',
+    op: 'OP',
+    sumo: 'Sumo',
+    classic: 'Classic',
+    combo: 'Combo',
+    bridge: 'Bridge',
+    nodebuff: 'NoDebuff',
+    bow: 'Bow',
+    skywars: 'SkyWars',
+    quake: 'Quake',
+    bedwars: 'Bed Wars'
+  }
 
   constructor() {
     super({
-      triggers: ['duels', 'duel'],
-      description: "Returns a player's duels stats with optional mode filter",
+      triggers: ['duels', 'duel', 'd'],
+      description: "Returns a player's Duels stats with optional mode filter",
       example: `duels [mode] %s`
     })
   }
@@ -76,7 +103,7 @@ export default class Duels extends ChatCommandHandler {
       const wlRatio = stats.WLRatio
 
       return (
-        `[Duels] [${division}] ${givenUsername} ` +
+        `[Duels] [${this.formatDivision(division)}] ${givenUsername} ` +
         `W: ${shortenNumber(wins)} | CWS: ${winstreak} | BWS: ${bestWinstreak} | WLR: ${wlRatio.toFixed(2)}`
       )
     }
@@ -84,7 +111,7 @@ export default class Duels extends ChatCommandHandler {
     // Mode-specific stats
     const modeData = (stats as unknown as Record<string, unknown>)[duelType]
     if (!modeData || typeof modeData !== 'object') {
-      return `${givenUsername} has no ${duelType.toUpperCase()} duels stats.`
+      return `${givenUsername} has no ${Duels.DuelDisplayNames[duelType]} Duels stats.`
     }
 
     const firstKey = Object.keys(modeData)[0]
@@ -102,8 +129,19 @@ export default class Duels extends ChatCommandHandler {
     const wlRatio = dataObject.WLRatio as number
 
     return (
-      `[${duelType.toUpperCase()}] [${division}] ${givenUsername} ` +
+      `[${Duels.DuelDisplayNames[duelType]}] [${this.formatDivision(division)}] ${givenUsername} ` +
       `W: ${shortenNumber(wins)} | CWS: ${winstreak} | BWS: ${bestWinstreak} | WLR: ${wlRatio.toFixed(2)}`
     )
+  }
+
+  private formatDivision(division: string): string {
+    const topTiers = ['celestial', 'divine', 'ascended']
+    const lowerDivision = division.toLowerCase()
+    for (const tier of topTiers) {
+      if (lowerDivision.startsWith(tier)) {
+        return division.toUpperCase()
+      }
+    }
+    return division
   }
 }

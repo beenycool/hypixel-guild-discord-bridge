@@ -162,6 +162,72 @@ export class Core extends Instance<InstanceType.Core> {
     return this.profanity.filterProfanity(message)
   }
 
+  /**
+   * Filter profanity for a specific bridge, respecting per-bridge settings
+   * @param message The message to filter
+   * @param bridgeId Optional bridge ID to check for per-bridge profanity settings
+   * @returns The filtered message and whether it was changed
+   */
+  public filterProfanityForBridge(
+    message: string,
+    bridgeId: string | undefined
+  ): { filteredMessage: string; changed: boolean } {
+    // Check per-bridge profanity setting first
+    if (bridgeId !== undefined) {
+      const bridgeProfanityEnabled = this.bridgeConfigurations.getProfanityEnabled(bridgeId)
+      if (bridgeProfanityEnabled === false) {
+        return { filteredMessage: message, changed: false }
+      }
+      // If bridgeProfanityEnabled is true or undefined, fall through to global check
+    }
+    return this.profanity.filterProfanity(message)
+  }
+
+  /**
+   * Check if heat punishment is enabled for a specific bridge
+   * @param bridgeId Optional bridge ID to check for per-bridge heat punishment settings
+   * @returns Whether heat punishment is enabled
+   */
+  public isHeatPunishmentEnabled(bridgeId: string | undefined): boolean {
+    if (bridgeId !== undefined) {
+      const bridgeHeatEnabled = this.bridgeConfigurations.getHeatPunishmentEnabled(bridgeId)
+      if (bridgeHeatEnabled !== undefined) {
+        return bridgeHeatEnabled
+      }
+    }
+    return this.moderationConfiguration.getHeatPunishment()
+  }
+
+  /**
+   * Get the kicks per day limit for a specific bridge
+   * @param bridgeId Optional bridge ID to check for per-bridge setting
+   * @returns The kicks per day limit
+   */
+  public getKicksPerDayForBridge(bridgeId: string | undefined): number {
+    if (bridgeId !== undefined) {
+      const bridgeLimit = this.bridgeConfigurations.getKicksPerDay(bridgeId)
+      if (bridgeLimit !== undefined) {
+        return bridgeLimit
+      }
+    }
+    return this.moderationConfiguration.getKicksPerDay()
+  }
+
+  /**
+   * Get the mutes per day limit for a specific bridge
+   * @param bridgeId Optional bridge ID to check for per-bridge setting
+   * @returns The mutes per day limit
+   */
+  public getMutesPerDayForBridge(bridgeId: string | undefined): number {
+    if (bridgeId !== undefined) {
+      const bridgeLimit = this.bridgeConfigurations.getMutesPerDay(bridgeId)
+      if (bridgeLimit !== undefined) {
+        return bridgeLimit
+      }
+    }
+    return this.moderationConfiguration.getMutesPerDay()
+  }
+
   public allPunishments(): SavedPunishment[] {
     return this.punishments.all()
   }

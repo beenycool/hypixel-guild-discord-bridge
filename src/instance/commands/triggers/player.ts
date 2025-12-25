@@ -6,7 +6,7 @@ import { getUuidIfExists, playerNeverPlayedHypixel, usernameNotExists } from '..
 export default class Player extends ChatCommandHandler {
   constructor() {
     super({
-      triggers: ['player'],
+      triggers: ['player', 'general'],
       description: 'Get Hypixel player stats.',
       example: `player %s`
     })

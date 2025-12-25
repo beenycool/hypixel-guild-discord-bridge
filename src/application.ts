@@ -67,6 +67,10 @@ export default class Application extends Emittery<ApplicationEvents> implements 
     return this.config.general.hypixelApiKey
   }
 
+  public get urchinApiKey(): string | undefined {
+    return this.config.general.urchinApiKey
+  }
+
   public getStatsChannelsConfig(): ApplicationConfig['statsChannels'] {
     return this.config.statsChannels
   }
@@ -83,8 +87,26 @@ export default class Application extends Emittery<ApplicationEvents> implements 
     return this.config.inactivity
   }
 
-  public getSkyblockEventsConfig(): ApplicationConfig['skyblockEvents'] {
-    return this.config.skyblockEvents
+  public getSkyblockEventsConfig(bridgeId?: string): ApplicationConfig['skyblockEvents'] {
+    const staticConfig = this.config.skyblockEvents
+
+    // If multi-bridge is not enabled or no bridgeId provided, return static config as-is
+    if (bridgeId === undefined || !this.bridgeResolver.isMultiBridgeEnabled()) return staticConfig
+
+    // Merge static config with bridge-specific overrides (bridge overrides take precedence)
+    const merged: ApplicationConfig['skyblockEvents'] = staticConfig ? { ...staticConfig } : { enabled: true }
+
+    // Bridge-specific enabled flag
+    const enabled = this.core.bridgeConfigurations.getSkyblockEventsEnabled(bridgeId)
+    merged.enabled = enabled
+
+    // Merge notifiers (bridge overrides take precedence)
+    const bridgeNotifiers = this.core.bridgeConfigurations.getSkyblockEventNotifiers(bridgeId)
+    if (bridgeNotifiers !== undefined) {
+      merged.notifiers = { ...merged.notifiers, ...bridgeNotifiers }
+    }
+
+    return merged
   }
 
   public getHypixelUpdatesConfig(): ApplicationConfig['hypixelUpdates'] {

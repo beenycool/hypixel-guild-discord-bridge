@@ -91,12 +91,12 @@ export function createGuildRequirementsEmbed(
     description: options.description,
     fields: [
       {
-        name: 'Bedwars Stars',
+        name: 'Bed Wars Stars',
         value: formatRequirement(data.stats.bedwarsStars, data.requirements.bedwarsStars),
         inline: true
       },
       {
-        name: 'Skywars Stars',
+        name: 'SkyWars Stars',
         value: formatRequirement(data.stats.skywarsStars, data.requirements.skywarsStars),
         inline: true
       },
@@ -106,12 +106,12 @@ export function createGuildRequirementsEmbed(
         inline: true
       },
       {
-        name: 'Bedwars FKDR',
+        name: 'Bed Wars FKDR',
         value: formatRequirement(data.stats.bedwarsFKDR, data.requirements.bedwarsFKDR, 2),
         inline: true
       },
       {
-        name: 'Skywars KDR',
+        name: 'SkyWars KDR',
         value: formatRequirement(data.stats.skywarsKDR, data.requirements.skywarsKDR, 2),
         inline: true
       },

@@ -15,7 +15,7 @@ export default class Bedwars extends ChatCommandHandler {
   constructor() {
     super({
       triggers: ['bedwars', 'bw', 'bws'],
-      description: "Returns a player's bedwars stats with optional mode filter",
+      description: "Returns a player's Bed Wars stats with optional mode filter",
       example: `bw [mode] %s`
     })
   }
@@ -41,12 +41,12 @@ export default class Bedwars extends ChatCommandHandler {
     if (player == undefined) return playerNeverPlayedHypixel(context, givenUsername)
 
     const stats = player.stats?.bedwars
-    if (stats === undefined) return `${givenUsername} has never played Bedwars before?`
+    if (stats === undefined) return `${givenUsername} has never played Bed Wars before?`
 
     // Get mode-specific or overall stats
     const modeStats = mode === 'overall' ? stats : (stats as unknown as Record<string, unknown>)[mode]
     if (modeStats === undefined) {
-      return `${givenUsername} has no ${capitalize(mode)} Bedwars stats.`
+      return `${givenUsername} has no ${capitalize(mode)} Bed Wars stats.`
     }
 
     // Extract stats based on mode

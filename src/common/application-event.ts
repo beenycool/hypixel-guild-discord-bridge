@@ -89,6 +89,10 @@ export interface ApplicationEvents {
    * Minecraft instance raw chat
    */
   minecraftChat: Readonly<MinecraftRawChatEvent>
+  /**
+   * Event emitted when a bridge-specific configuration changes dynamically
+   */
+  bridgeConfigChanged: Readonly<{ bridgeId: string; key: string; value: unknown }>
 }
 
 /**

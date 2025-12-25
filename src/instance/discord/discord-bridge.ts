@@ -84,10 +84,7 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
    * If multi-bridge is enabled and the event has a bridgeId, use bridge-specific channels.
    * Otherwise, fall back to legacy global channel configuration.
    */
-  private resolveChannelsForEvent(
-    channels: ChannelType[],
-    bridgeId: string | undefined
-  ): string[] {
+  private resolveChannelsForEvent(channels: ChannelType[], bridgeId: string | undefined): string[] {
     const bridgeResolver = this.application.bridgeResolver
     const legacyConfig = this.application.core.discordConfigurations
 
@@ -133,7 +130,7 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
 
       if (event.instanceType === InstanceType.Minecraft && this.messageToImage.shouldRenderImage()) {
         const formattedMessage = this.removeGuildPrefix(event.rawMessage)
-        const image = this.messageToImage.generateMessageImageSync(formattedMessage)
+        const image = await this.messageToImage.generateMessageImage(formattedMessage)
         await this.sendImageToChannels(event.eventId, [channelId], image)
       } else {
         const webhook = await this.getWebhook(channelId)
@@ -195,7 +192,7 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
       messages = await this.sendImageToChannels(
         event.eventId,
         this.resolveChannelsForEvent(event.channels, event.bridgeId),
-        this.messageToImage.generateMessageImageSync(formattedMessage)
+        await this.messageToImage.generateMessageImage(formattedMessage)
       )
     } else {
       const clickableUsername = hyperlink(username, event.user.profileLink())
@@ -239,7 +236,11 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
       const image = this.messageToImage.generateMessageImageSync(event.rawMessage)
       await this.sendImageToChannels(event.eventId, this.resolveChannelsForEvent(event.channels, event.bridgeId), image)
     } else {
-      await this.sendEmbedToChannels({ ...event, type: undefined }, this.resolveChannelsForEvent(event.channels, event.bridgeId), undefined)
+      await this.sendEmbedToChannels(
+        { ...event, type: undefined },
+        this.resolveChannelsForEvent(event.channels, event.bridgeId),
+        undefined
+      )
     }
   }
 
@@ -521,7 +522,7 @@ export default class DiscordBridge extends Bridge<DiscordInstance> {
       try {
         if (this.messageToImage.shouldRenderImage()) {
           const message = this.formatRenderedImage(feedback ? 'FEED' : 'COMMAND', event.commandResponse)
-          const image = this.messageToImage.generateMessageImageSync(message, { withBackground: true })
+          const image = this.messageToImage.generateMessageImageSync(message)
           await this.sendImageToChannels(event.eventId, [replyId.channelId], image)
         } else {
           await this.replyWithEmbed(event.eventId, replyId, replyEmbed)

@@ -1,5 +1,6 @@
 import type { BridgeConfig } from '../application-config.js'
 import type { BridgeConfigurations } from '../core/discord/bridge-configurations.js'
+
 import type { ChannelType } from './application-event.js'
 
 /**
@@ -11,13 +12,14 @@ export interface ResolvedBridge {
   minecraftInstanceNames: string[]
   publicChannelIds: string[]
   officerChannelIds: string[]
+  loggerChannelIds: string[]
 }
 
 /**
  * Resolves bridge membership for instances and channels.
  * Supports multi-guild configurations where specific Minecraft instances
  * are linked to specific Discord channels.
- * 
+ *
  * Configuration sources (in order of priority):
  * 1. Static config from config.yaml (bridges array)
  * 2. Dynamic config from database (via /settings command)
@@ -32,9 +34,10 @@ export class BridgeResolver {
   private dynamicConfig: BridgeConfigurations | undefined
 
   // Lookup maps for fast resolution (rebuilt when config changes)
-  private instanceToBridge: Map<string, string> = new Map()
-  private publicChannelToBridge: Map<string, string> = new Map()
-  private officerChannelToBridge: Map<string, string> = new Map()
+  private instanceToBridge = new Map<string, string>()
+  private publicChannelToBridge = new Map<string, string>()
+  private officerChannelToBridge = new Map<string, string>()
+  private loggerChannelToBridge = new Map<string, string>()
 
   constructor(staticBridges: BridgeConfig[] | undefined) {
     this.staticBridges = staticBridges ?? []
@@ -43,10 +46,18 @@ export class BridgeResolver {
 
   /**
    * Set the dynamic configuration source (called after Core is initialized)
+   * @param config
    */
   public setDynamicConfig(config: BridgeConfigurations): void {
     this.dynamicConfig = config
     this.rebuildLookupMaps()
+  }
+
+  /**
+   * Get the dynamic configuration for accessing per-bridge settings
+   */
+  public getDynamicConfig(): BridgeConfigurations | undefined {
+    return this.dynamicConfig
   }
 
   /**
@@ -56,6 +67,7 @@ export class BridgeResolver {
     this.instanceToBridge.clear()
     this.publicChannelToBridge.clear()
     this.officerChannelToBridge.clear()
+    this.loggerChannelToBridge.clear()
 
     // First, add static bridges
     for (const bridge of this.staticBridges) {
@@ -82,6 +94,9 @@ export class BridgeResolver {
         for (const channelId of this.dynamicConfig.getOfficerChannelIds(bridgeId)) {
           this.officerChannelToBridge.set(channelId, bridgeId)
         }
+        for (const channelId of this.dynamicConfig.getLoggerChannelIds(bridgeId)) {
+          this.loggerChannelToBridge.set(channelId, bridgeId)
+        }
       }
     }
   }
@@ -106,7 +121,8 @@ export class BridgeResolver {
         id: bridge.id,
         minecraftInstanceNames: [...bridge.minecraftInstanceNames],
         publicChannelIds: [...bridge.discord.publicChannelIds],
-        officerChannelIds: [...bridge.discord.officerChannelIds]
+        officerChannelIds: [...bridge.discord.officerChannelIds],
+        loggerChannelIds: []
       })
     }
 
@@ -117,7 +133,8 @@ export class BridgeResolver {
           id: bridgeId,
           minecraftInstanceNames: this.dynamicConfig.getMinecraftInstances(bridgeId),
           publicChannelIds: this.dynamicConfig.getPublicChannelIds(bridgeId),
-          officerChannelIds: this.dynamicConfig.getOfficerChannelIds(bridgeId)
+          officerChannelIds: this.dynamicConfig.getOfficerChannelIds(bridgeId),
+          loggerChannelIds: this.dynamicConfig.getLoggerChannelIds(bridgeId)
         })
       }
     }
@@ -128,6 +145,7 @@ export class BridgeResolver {
   /**
    * Resolve the bridge ID for a Minecraft instance name.
    * Returns undefined if the instance is not part of any bridge.
+   * @param instanceName
    */
   public getBridgeIdForInstance(instanceName: string): string | undefined {
     if (!this.isMultiBridgeEnabled()) return undefined
@@ -137,24 +155,32 @@ export class BridgeResolver {
   /**
    * Resolve the bridge ID for a Discord channel.
    * Returns the bridge ID if the channel belongs to a bridge, undefined otherwise.
+   * @param channelId
    */
   public getBridgeIdForChannel(channelId: string): string | undefined {
     if (!this.isMultiBridgeEnabled()) return undefined
-    return this.publicChannelToBridge.get(channelId) ?? this.officerChannelToBridge.get(channelId)
+    return (
+      this.publicChannelToBridge.get(channelId) ??
+      this.officerChannelToBridge.get(channelId) ??
+      this.loggerChannelToBridge.get(channelId)
+    )
   }
 
   /**
-   * Get the channel type (public/officer) for a channel within its bridge.
+   * Get the channel type (public/officer/logger) for a channel within its bridge.
    * Returns undefined if the channel is not part of any bridge.
+   * @param channelId
    */
-  public getChannelTypeForChannel(channelId: string): 'public' | 'officer' | undefined {
+  public getChannelTypeForChannel(channelId: string): 'public' | 'officer' | 'logger' | undefined {
     if (this.publicChannelToBridge.has(channelId)) return 'public'
     if (this.officerChannelToBridge.has(channelId)) return 'officer'
+    if (this.loggerChannelToBridge.has(channelId)) return 'logger'
     return undefined
   }
 
   /**
    * Get a bridge configuration by its ID.
+   * @param bridgeId
    */
   public getBridgeById(bridgeId: string): ResolvedBridge | undefined {
     return this.getAllBridges().find((b) => b.id === bridgeId)
@@ -164,6 +190,7 @@ export class BridgeResolver {
    * Get all public channel IDs for a specific bridge.
    * If bridgeId is undefined and multi-bridge is disabled, returns empty array
    * (caller should use legacy configuration).
+   * @param bridgeId
    */
   public getPublicChannelIds(bridgeId: string | undefined): string[] {
     if (!this.isMultiBridgeEnabled()) return []
@@ -177,6 +204,7 @@ export class BridgeResolver {
    * Get all officer channel IDs for a specific bridge.
    * If bridgeId is undefined and multi-bridge is disabled, returns empty array
    * (caller should use legacy configuration).
+   * @param bridgeId
    */
   public getOfficerChannelIds(bridgeId: string | undefined): string[] {
     if (!this.isMultiBridgeEnabled()) return []
@@ -187,7 +215,23 @@ export class BridgeResolver {
   }
 
   /**
+   * Get all logger channel IDs for a specific bridge.
+   * If bridgeId is undefined and multi-bridge is disabled, returns empty array
+   * (caller should use legacy configuration).
+   * @param bridgeId
+   */
+  public getLoggerChannelIds(bridgeId: string | undefined): string[] {
+    if (!this.isMultiBridgeEnabled()) return []
+    if (bridgeId === undefined) return []
+
+    const bridge = this.getBridgeById(bridgeId)
+    return bridge?.loggerChannelIds ?? []
+  }
+
+  /**
    * Check if two bridge IDs match (both undefined counts as a match for legacy mode).
+   * @param bridgeId1
+   * @param bridgeId2
    */
   public bridgesMatch(bridgeId1: string | undefined, bridgeId2: string | undefined): boolean {
     // If multi-bridge is not enabled, everything matches
@@ -202,6 +246,8 @@ export class BridgeResolver {
 
   /**
    * Check if an event with the given bridgeId should be processed by an instance with the given instanceName.
+   * @param eventBridgeId
+   * @param instanceName
    */
   public shouldProcessEvent(eventBridgeId: string | undefined, instanceName: string): boolean {
     if (!this.isMultiBridgeEnabled()) return true

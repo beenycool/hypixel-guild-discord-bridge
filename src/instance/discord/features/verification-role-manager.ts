@@ -241,12 +241,23 @@ export default class VerificationRoleManager extends SubInstance<DiscordInstance
       skywarsWins: skywarsStats?.wins ?? 0,
       skywarsWLRatio: skywarsStats?.WLRatio ?? 0,
 
-      duelsTitle: duelsStats?.title ?? '',
+      duelsTitle: this.formatDuelsDivision(duelsStats?.title ?? ''),
       duelsWins: duelsStats?.wins ?? 0,
       duelsWLRatio: duelsStats?.WLRatio ?? 0,
 
       skyblockLevel: skyblockLevel
     }
+  }
+
+  private formatDuelsDivision(division: string): string {
+    const topTiers = ['celestial', 'divine', 'ascended']
+    const lowerDivision = division.toLowerCase()
+    for (const tier of topTiers) {
+      if (lowerDivision.startsWith(tier)) {
+        return division.toUpperCase()
+      }
+    }
+    return division
   }
 
   private async fetchMember(guild: Guild, discordId: string): Promise<GuildMember | undefined> {

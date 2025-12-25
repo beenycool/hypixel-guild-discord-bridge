@@ -109,7 +109,7 @@ export default class ChatManager extends SubInstance<DiscordInstance, InstanceTy
       messageId: event.id
     })
 
-    const { filteredMessage, changed } = this.application.core.filterProfanity(content)
+    const { filteredMessage, changed } = this.application.core.filterProfanityForBridge(content, bridgeId)
     if (changed) {
       await this.application.emit('profanityWarning', {
         ...fillBaseEvent,

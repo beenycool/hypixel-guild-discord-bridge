@@ -54,6 +54,12 @@
   "commands.error.username-not-exists": "Invalid username! (given: {{username}}).",
   "commands.error.never-joined-hypixel": "{{username}} has never played on Hypixel before?",
   "commands.error.never-joined-skyblock": "{{username}} has never played skyblock before?",
+  "commands.urchin.no-key": "Urchin API key is not configured in the general settings.",
+  "commands.urchin.no-tags": "{{username}} has no Urchin tags.",
+  "commands.urchin.tags": "{{username}} has the following Urchin tags: {{tags}}",
+  "commands.urchin.not-found": "{{username}} was not found in the Urchin database.",
+  "commands.urchin.invalid-key": "Invalid Urchin API key.",
+  "commands.urchin.error": "An error occurred while checking Urchin for {{username}}.",
   "commands.praise": [
     "{{name}} is a very good boy/girl",
     "*Pats {{name}}'s head*",

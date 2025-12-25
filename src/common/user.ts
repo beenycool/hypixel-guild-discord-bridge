@@ -74,14 +74,14 @@ export class User {
     return this.userDiscord
   }
 
-  public permission(): Permission {
+  public permission(bridgeId?: string): Permission {
     let permission = Permission.Anyone
 
     const discordProfile = this.discordProfile()
     if (discordProfile !== undefined) {
       const discordInstance = this.application.discordInstance
       if (discordInstance.currentStatus() === Status.Connected) {
-        const discordPermission = discordInstance.resolvePermission(discordProfile.id)
+        const discordPermission = discordInstance.resolvePermission(discordProfile.id, bridgeId)
         if (discordPermission > permission) permission = discordPermission
       }
     }

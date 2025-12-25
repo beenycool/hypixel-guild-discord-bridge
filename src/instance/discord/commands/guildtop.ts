@@ -99,7 +99,10 @@ async function resolveGuild(
     }
   }
 
-  const bots = context.application.minecraftManager.getMinecraftBots()
+  const bots = context.application.minecraftManager
+    .getMinecraftBots()
+    .filter((bot) => context.application.bridgeResolver.shouldProcessEvent(context.bridgeId, bot.instanceName))
+
   if (bots.length === 0) return undefined
 
   try {

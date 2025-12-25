@@ -1,3 +1,12 @@
 node_modules
 logs
+config/backup
 .idea
+.git
+.vscode
+*.log
+Dockerfile
+docker-compose.yml
+README.md
+CONTRIBUTING.md
+LICENSE

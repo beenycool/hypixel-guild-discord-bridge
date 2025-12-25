@@ -54,11 +54,22 @@ export default class Reaction extends SubInstance<MinecraftInstance, InstanceTyp
       )
         return
 
+      const bridgeId = this.application.bridgeResolver.getBridgeIdForInstance(this.clientInstance.instanceName)
+      const bridgeConfig = this.application.core.bridgeConfigurations
+
       if (
         event.type === GuildPlayerEventType.Join &&
-        this.application.core.minecraftConfigurations.getJoinGuildReaction()
+        (bridgeId
+          ? bridgeConfig.getJoinGuildReaction(bridgeId)
+          : this.application.core.minecraftConfigurations.getJoinGuildReaction())
       ) {
-        const messages = this.application.core.languageConfigurations.getGuildJoinReaction()
+        const messages = bridgeId
+          ? bridgeConfig.getGuildJoinReactionMessages(
+              bridgeId,
+              this.application.core.languageConfigurations.getGuildJoinReaction()
+            )
+          : this.application.core.languageConfigurations.getGuildJoinReaction()
+
         if (messages.length === 0) {
           this.logger.error('There is no guild join reaction messages. Dropping the reaction entirely.')
           return
@@ -79,9 +90,17 @@ export default class Reaction extends SubInstance<MinecraftInstance, InstanceTyp
 
       if (
         event.type === GuildPlayerEventType.Leave &&
-        this.application.core.minecraftConfigurations.getLeaveGuildReaction()
+        (bridgeId
+          ? bridgeConfig.getLeaveGuildReaction(bridgeId)
+          : this.application.core.minecraftConfigurations.getLeaveGuildReaction())
       ) {
-        const messages = this.application.core.languageConfigurations.getGuildLeaveReaction()
+        const messages = bridgeId
+          ? bridgeConfig.getGuildLeaveReactionMessages(
+              bridgeId,
+              this.application.core.languageConfigurations.getGuildLeaveReaction()
+            )
+          : this.application.core.languageConfigurations.getGuildLeaveReaction()
+
         if (messages.length === 0) {
           this.logger.error('There is no guild leave reaction messages. Dropping the reaction entirely.')
           return
@@ -101,9 +120,17 @@ export default class Reaction extends SubInstance<MinecraftInstance, InstanceTyp
 
       if (
         event.type === GuildPlayerEventType.Kick &&
-        this.application.core.minecraftConfigurations.getKickGuildReaction()
+        (bridgeId
+          ? bridgeConfig.getKickGuildReaction(bridgeId)
+          : this.application.core.minecraftConfigurations.getKickGuildReaction())
       ) {
-        const messages = this.application.core.languageConfigurations.getGuildKickReaction()
+        const messages = bridgeId
+          ? bridgeConfig.getGuildKickReactionMessages(
+              bridgeId,
+              this.application.core.languageConfigurations.getGuildKickReaction()
+            )
+          : this.application.core.languageConfigurations.getGuildKickReaction()
+
         if (messages.length === 0) {
           this.logger.error('There is no guild kick reaction messages. Dropping the reaction entirely.')
           return

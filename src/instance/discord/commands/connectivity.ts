@@ -52,8 +52,10 @@ export default {
   handler: async function (context) {
     await context.interaction.deferReply()
 
-    const instancesNames = context.application.getInstancesNames(InstanceType.Minecraft)
-    const lists: Map<string, string[]> = await checkConnectivity(context.application)
+    const instancesNames = context.application
+      .getInstancesNames(InstanceType.Minecraft)
+      .filter((name) => context.application.bridgeResolver.shouldProcessEvent(context.bridgeId, name))
+    const lists: Map<string, string[]> = await checkConnectivity(context.application, context.bridgeId)
 
     for (const instancesName of instancesNames) {
       if (!lists.has(instancesName)) lists.set(instancesName, [])
@@ -63,7 +65,7 @@ export default {
   }
 } satisfies DiscordCommandHandler
 
-async function checkConnectivity(app: Application): Promise<Map<string, string[]>> {
+async function checkConnectivity(app: Application, bridgeId?: string): Promise<Map<string, string[]>> {
   const receivedResponses = new Map<string, string[]>()
   const queryWords = [
     `Testing Connectivity 1 - @${antiSpamString()}`,
@@ -87,30 +89,21 @@ async function checkConnectivity(app: Application): Promise<Map<string, string[]
 
   app.on('minecraftChat', chatListener)
 
+  const instances = app
+    .getInstancesNames(InstanceType.Minecraft)
+    .filter((name) => app.bridgeResolver.shouldProcessEvent(bridgeId, name))
+
   const tasks: Promise<void>[] = [
-    app.sendMinecraft(
-      app.getInstancesNames(InstanceType.Minecraft),
-      MinecraftSendChatPriority.High,
-      undefined,
-      `/ac ${queryWords[0]}`
-    ),
-    app.sendMinecraft(
-      app.getInstancesNames(InstanceType.Minecraft),
-      MinecraftSendChatPriority.High,
-      undefined,
-      `/gc ${queryWords[1]}`
-    ),
-    app.sendMinecraft(
-      app.getInstancesNames(InstanceType.Minecraft),
-      MinecraftSendChatPriority.High,
-      undefined,
-      `/oc ${queryWords[2]}`
-    )
+    app.sendMinecraft(instances, MinecraftSendChatPriority.High, undefined, `/ac ${queryWords[0]}`),
+    app.sendMinecraft(instances, MinecraftSendChatPriority.High, undefined, `/gc ${queryWords[1]}`),
+    app.sendMinecraft(instances, MinecraftSendChatPriority.High, undefined, `/oc ${queryWords[2]}`)
   ]
 
   for (const bot of app.minecraftManager.getMinecraftBots()) {
+    if (!app.bridgeResolver.shouldProcessEvent(bridgeId, bot.instanceName)) continue
+
     const task = app.sendMinecraft(
-      app.getInstancesNames(InstanceType.Minecraft),
+      instances,
       MinecraftSendChatPriority.High,
       undefined,
       `/msg ${bot.username} ${queryWords[3]}`

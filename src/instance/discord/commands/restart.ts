@@ -9,6 +9,11 @@ export default {
   permission: Permission.Admin,
 
   handler: async function (context) {
+    if (context.user.permission() < Permission.Admin) {
+      await context.showPermissionDenied(Permission.Admin)
+      return
+    }
+
     await context.interaction.reply(
       'Restart signal will be sent.\n' + 'It will take some time for the bridge to restart.\n'
     )
