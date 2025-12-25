@@ -22,6 +22,7 @@ import { User } from '../common/user'
 import { ApplicationConfigurations } from './application-configurations'
 import { CommandsConfigurations } from './commands/commands-configurations'
 import { ConfigurationsManager } from './configurations'
+import { BridgeConfigurations } from './discord/bridge-configurations'
 import { DiscordConfigurations } from './discord/discord-configurations'
 import { DiscordEmojis } from './discord/discord-emojis'
 import { DiscordLeaderboards } from './discord/discord-leaderboards'
@@ -42,6 +43,7 @@ import PunishmentsEnforcer from './moderation/punishments-enforcer'
 import { SpontaneousEventsConfigurations } from './spontanmous-events-configurations'
 import Autocomplete from './users/autocomplete'
 import { GuildManager } from './users/guild-manager'
+import { Inactivity } from './users/inactivity'
 import { MojangApi } from './users/mojang'
 import ScoresManager from './users/scores-manager'
 import { Verification } from './users/verification'
@@ -58,9 +60,11 @@ export class Core extends Instance<InstanceType.Core> {
   public readonly guildManager: GuildManager
   public readonly mojangApi: MojangApi
   public readonly scoresManager: ScoresManager
+  public readonly inactivity: Inactivity
   public readonly verification: Verification
 
   // discord
+  public readonly bridgeConfigurations: BridgeConfigurations
   public readonly discordConfigurations: DiscordConfigurations
   public readonly discordLeaderboards: DiscordLeaderboards
   public readonly discordTemporarilyInteractions: DiscordTemporarilyInteractions
@@ -95,6 +99,7 @@ export class Core extends Instance<InstanceType.Core> {
 
     this.configurationsManager = new ConfigurationsManager(this.sqliteManager)
 
+    this.bridgeConfigurations = new BridgeConfigurations(this.configurationsManager)
     this.discordConfigurations = new DiscordConfigurations(this.configurationsManager)
     this.discordLeaderboards = new DiscordLeaderboards(this.sqliteManager)
     this.discordTemporarilyInteractions = new DiscordTemporarilyInteractions(
@@ -134,6 +139,7 @@ export class Core extends Instance<InstanceType.Core> {
     )
 
     this.verification = new Verification(this.sqliteManager)
+    this.inactivity = new Inactivity(this.sqliteManager)
     this.scoresManager = new ScoresManager(
       application,
       this,
@@ -154,6 +160,72 @@ export class Core extends Instance<InstanceType.Core> {
 
   public filterProfanity(message: string): { filteredMessage: string; changed: boolean } {
     return this.profanity.filterProfanity(message)
+  }
+
+  /**
+   * Filter profanity for a specific bridge, respecting per-bridge settings
+   * @param message The message to filter
+   * @param bridgeId Optional bridge ID to check for per-bridge profanity settings
+   * @returns The filtered message and whether it was changed
+   */
+  public filterProfanityForBridge(
+    message: string,
+    bridgeId: string | undefined
+  ): { filteredMessage: string; changed: boolean } {
+    // Check per-bridge profanity setting first
+    if (bridgeId !== undefined) {
+      const bridgeProfanityEnabled = this.bridgeConfigurations.getProfanityEnabled(bridgeId)
+      if (bridgeProfanityEnabled === false) {
+        return { filteredMessage: message, changed: false }
+      }
+      // If bridgeProfanityEnabled is true or undefined, fall through to global check
+    }
+    return this.profanity.filterProfanity(message)
+  }
+
+  /**
+   * Check if heat punishment is enabled for a specific bridge
+   * @param bridgeId Optional bridge ID to check for per-bridge heat punishment settings
+   * @returns Whether heat punishment is enabled
+   */
+  public isHeatPunishmentEnabled(bridgeId: string | undefined): boolean {
+    if (bridgeId !== undefined) {
+      const bridgeHeatEnabled = this.bridgeConfigurations.getHeatPunishmentEnabled(bridgeId)
+      if (bridgeHeatEnabled !== undefined) {
+        return bridgeHeatEnabled
+      }
+    }
+    return this.moderationConfiguration.getHeatPunishment()
+  }
+
+  /**
+   * Get the kicks per day limit for a specific bridge
+   * @param bridgeId Optional bridge ID to check for per-bridge setting
+   * @returns The kicks per day limit
+   */
+  public getKicksPerDayForBridge(bridgeId: string | undefined): number {
+    if (bridgeId !== undefined) {
+      const bridgeLimit = this.bridgeConfigurations.getKicksPerDay(bridgeId)
+      if (bridgeLimit !== undefined) {
+        return bridgeLimit
+      }
+    }
+    return this.moderationConfiguration.getKicksPerDay()
+  }
+
+  /**
+   * Get the mutes per day limit for a specific bridge
+   * @param bridgeId Optional bridge ID to check for per-bridge setting
+   * @returns The mutes per day limit
+   */
+  public getMutesPerDayForBridge(bridgeId: string | undefined): number {
+    if (bridgeId !== undefined) {
+      const bridgeLimit = this.bridgeConfigurations.getMutesPerDay(bridgeId)
+      if (bridgeLimit !== undefined) {
+        return bridgeLimit
+      }
+    }
+    return this.moderationConfiguration.getMutesPerDay()
   }
 
   public allPunishments(): SavedPunishment[] {

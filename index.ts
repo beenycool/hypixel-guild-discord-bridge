@@ -9,7 +9,7 @@ import Logger4js from 'log4js'
 import PackageJson from './package.json' with { type: 'json' }
 import Application from './src/application.js'
 import { Instance } from './src/common/instance'
-import { loadApplicationConfig } from './src/configuration-parser.js'
+import { loadApplicationConfig, parseApplicationConfig } from './src/configuration-parser.js'
 import { loadI18 } from './src/i18next'
 import { gracefullyExitProcess } from './src/utility/shared-utility'
 
@@ -79,22 +79,51 @@ if (process.argv.includes('test-run')) {
 }
 
 const File = process.argv[2] ?? './config.yaml'
-if (!fs.existsSync(File)) {
-  Logger.fatal(`File ${File} does not exist.`)
-  Logger.fatal(`You can rename config_example.yaml to config.yaml and use it as the configuration file.`)
-  Logger.fatal(`If this is the first time running the application, please read README.md before proceeding.`)
-  await gracefullyExitProcess(1)
+let config: ReturnType<typeof loadApplicationConfig>
+
+// Priority order for loading configuration:
+// 1. CONFIG_B64 - base64-encoded YAML/JSON (recommended for platforms that strip newlines)
+// 2. CONFIG - raw YAML/JSON string
+// 3. config file on disk (default: ./config.yaml)
+if (process.env.CONFIG_B64) {
+  Logger.info('Loading configuration from base64 environment variable "CONFIG_B64"')
+  try {
+    const decoded = Buffer.from(process.env.CONFIG_B64, 'base64').toString('utf8')
+    config = parseApplicationConfig(decoded)
+  } catch (err) {
+    Logger.fatal('Failed to decode CONFIG_B64 environment variable')
+    Logger.fatal(err)
+    await gracefullyExitProcess(1)
+  }
+} else if (process.env.CONFIG) {
+  Logger.info('Loading configuration from environment variable "CONFIG"')
+  try {
+    config = parseApplicationConfig(process.env.CONFIG)
+  } catch (err) {
+    Logger.fatal('Failed to parse CONFIG environment variable')
+    Logger.fatal(err)
+    await gracefullyExitProcess(1)
+  }
+} else {
+  if (!fs.existsSync(File)) {
+    Logger.fatal(`File ${File} does not exist.`)
+    Logger.fatal(`You can rename config_example.yaml to config.yaml and use it as the configuration file.`)
+    Logger.fatal(`If this is the first time running the application, please read README.md before proceeding.`)
+    await gracefullyExitProcess(1)
+  }
+  config = loadApplicationConfig(File)
 }
 
 try {
-  app = new Application(loadApplicationConfig(File), RootDirectory, ConfigsDirectory, I18n.cloneInstance())
+  app = new Application(config, RootDirectory, ConfigsDirectory, I18n.cloneInstance())
 
   const loggers = new Map<string, Logger4js.Logger>()
   app.onAny((name, event) => {
-    let instanceLogger = loggers.get(event.instanceName)
+    const instanceName = (event as any).instanceName ?? 'unknown'
+    let instanceLogger = loggers.get(instanceName)
     if (instanceLogger === undefined) {
-      instanceLogger = Instance.createLogger(event.instanceName)
-      loggers.set(event.instanceName, instanceLogger)
+      instanceLogger = Instance.createLogger(instanceName)
+      loggers.set(instanceName, instanceLogger)
     }
     instanceLogger.log(`[${name}] ${JSON.stringify(event)}`)
   })

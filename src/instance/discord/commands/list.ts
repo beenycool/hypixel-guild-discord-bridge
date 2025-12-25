@@ -102,7 +102,8 @@ export default {
       context.errorHandler,
       context.application.mojangApi,
       context.application.hypixelApi,
-      onlyOnline
+      onlyOnline,
+      context.bridgeId
     )
 
     if (lists.size === 0) {
@@ -132,9 +133,10 @@ async function listMembers(
   errorHandler: UnexpectedErrorHandler,
   mojangApi: MojangApi,
   hypixelApi: Client,
-  onlyOnline: boolean
+  onlyOnline: boolean,
+  bridgeId?: string
 ): Promise<Map<string, string[]>> {
-  const guildsLookup = await getGuilds(app, errorHandler)
+  const guildsLookup = await getGuilds(app, errorHandler, bridgeId)
 
   const allUsernames = new Set<string>()
   const onlineUsernames = new Set<string>()
@@ -262,12 +264,18 @@ function formatLocation(username: string, link: UserLink | undefined, session: S
   return message
 }
 
-async function getGuilds(app: Application, errorHandler: UnexpectedErrorHandler): Promise<GuildsLookup> {
+async function getGuilds(
+  app: Application,
+  errorHandler: UnexpectedErrorHandler,
+  bridgeId?: string
+): Promise<GuildsLookup> {
   const tasks: Promise<unknown>[] = []
 
   const result: GuildsLookup = { fetched: [], failed: [] }
 
   for (const instanceName of app.getInstancesNames(InstanceType.Minecraft)) {
+    if (!app.bridgeResolver.shouldProcessEvent(bridgeId, instanceName)) continue
+
     const task = app.core.guildManager
       .list(instanceName)
       .then((guild) => {

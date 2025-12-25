@@ -334,17 +334,25 @@ async function takeAction(
   chatTrigger: RegexChat,
   post: () => Promise<string> | string | undefined
 ): Promise<void> {
-  const heat = responsible.tryAddModerationAction(heatType)
-  if (heat === HeatResult.Denied) {
-    await handleHeatDenied(context.interaction)
-    return
+  // Check if heat punishment is enabled for this bridge
+  const heatEnabled = context.application.core.isHeatPunishmentEnabled(context.bridgeId)
+
+  let heat: HeatResult = HeatResult.Allowed
+  if (heatEnabled) {
+    heat = responsible.tryAddModerationAction(heatType)
+    if (heat === HeatResult.Denied) {
+      await handleHeatDenied(context.interaction)
+      return
+    }
   }
 
   let noError = true
   let result = header
 
   const mojangProfile = target.mojangProfile()
-  const instances = context.application.getInstancesNames(InstanceType.Minecraft)
+  const instances = context.application
+    .getInstancesNames(InstanceType.Minecraft)
+    .filter((instanceName) => context.application.bridgeResolver.shouldProcessEvent(context.bridgeId, instanceName))
   if (mojangProfile !== undefined && command !== undefined && instances.length > 0) {
     result += '\n\n### In-game Actions\n'
 

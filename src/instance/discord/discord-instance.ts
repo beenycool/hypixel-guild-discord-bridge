@@ -13,15 +13,21 @@ import ChatManager from './chat-manager.js'
 import { CommandManager } from './command-manager.js'
 import MessageAssociation from './common/message-association.js'
 import DiscordBridge from './discord-bridge.js'
+import GuildRequirements from './features/guild-requirements.js'
 import Leaderboard from './features/leaderboard.js'
 import LoggerManager from './features/logger-manager.js'
+import StatsChannels from './features/stats-channels.js'
+import VerificationRoleManager from './features/verification-role-manager.js'
 import EmojiHandler from './handlers/emoji-handler.js'
 import StateHandler from './handlers/state-handler.js'
 import StatusHandler from './handlers/status-handler.js'
 
 export default class DiscordInstance extends ConnectableInstance<InstanceType.Discord> {
   readonly commandsManager: CommandManager
+  readonly guildRequirements: GuildRequirements
   readonly leaderboard: Leaderboard
+  readonly statsChannels: StatsChannels
+  readonly verificationRoleManager: VerificationRoleManager
 
   private readonly client: Client
 
@@ -77,7 +83,22 @@ export default class DiscordInstance extends ConnectableInstance<InstanceType.Di
     )
     this.commandsManager = new CommandManager(this.application, this, this.eventHelper, this.logger, this.errorHandler)
     this.loggerManager = new LoggerManager(this.application, this, this.eventHelper, this.logger, this.errorHandler)
+    this.guildRequirements = new GuildRequirements(
+      this.application,
+      this,
+      this.eventHelper,
+      this.logger,
+      this.errorHandler
+    )
     this.leaderboard = new Leaderboard(this.application, this, this.eventHelper, this.logger, this.errorHandler)
+    this.statsChannels = new StatsChannels(this.application, this, this.eventHelper, this.logger, this.errorHandler)
+    this.verificationRoleManager = new VerificationRoleManager(
+      this.application,
+      this,
+      this.eventHelper,
+      this.logger,
+      this.errorHandler
+    )
 
     this.bridge = new DiscordBridge(
       this.application,
@@ -123,7 +144,7 @@ export default class DiscordInstance extends ConnectableInstance<InstanceType.Di
     return undefined
   }
 
-  public resolvePermission(userId: string): Permission {
+  public resolvePermission(userId: string, bridgeId?: string): Permission {
     assert.strictEqual(this.currentStatus(), Status.Connected)
     assert.ok(this.client.isReady())
 
@@ -133,14 +154,25 @@ export default class DiscordInstance extends ConnectableInstance<InstanceType.Di
     for (const guild of this.client.guilds.cache.values()) {
       const guildMember = guild.members.cache.get(userId)
       if (guildMember === undefined) continue
-      const permissionLevel = this.resolvePrivilegeLevel(guildMember.roles.cache.keys().toArray())
+      const permissionLevel = this.resolvePrivilegeLevel(guildMember.roles.cache.keys().toArray(), bridgeId)
       if (permissionLevel > highestPermission) highestPermission = permissionLevel
     }
 
     return highestPermission
   }
 
-  private resolvePrivilegeLevel(roles: string[]): Permission {
+  private resolvePrivilegeLevel(roles: string[], bridgeId?: string): Permission {
+    if (bridgeId !== undefined) {
+      const bridgeConfig = this.application.core.bridgeConfigurations
+      if (roles.some((role) => bridgeConfig.getOfficerRoleIds(bridgeId).includes(role))) {
+        return Permission.Officer
+      }
+
+      if (roles.some((role) => bridgeConfig.getHelperRoleIds(bridgeId).includes(role))) {
+        return Permission.Helper
+      }
+    }
+
     const config = this.application.core.discordConfigurations
     if (roles.some((role) => config.getOfficerRoleIds().includes(role))) {
       return Permission.Officer
@@ -180,6 +212,9 @@ export default class DiscordInstance extends ConnectableInstance<InstanceType.Di
     this.commandsManager.registerEvents(this.client)
     this.leaderboard.registerEvents(this.client)
     this.loggerManager.registerEvents(this.client)
+    this.guildRequirements.registerEvents(this.client)
+    this.statsChannels.registerEvents(this.client)
+    this.verificationRoleManager.registerEvents(this.client)
 
     await this.client.login(this.staticConfig.key)
   }

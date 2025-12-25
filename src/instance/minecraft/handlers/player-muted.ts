@@ -26,12 +26,24 @@ export default class PlayerMuted extends SubInstance<MinecraftInstance, Instance
         event.instanceType !== this.clientInstance.instanceType
       )
         return
-      if (!this.application.core.minecraftConfigurations.getAnnounceMutedPlayer()) return
+
+      const bridgeId = this.application.bridgeResolver.getBridgeIdForInstance(this.clientInstance.instanceName)
+      const bridgeConfig = this.application.core.bridgeConfigurations
+
+      const enabled = bridgeId
+        ? bridgeConfig.getAnnounceMutedPlayer(bridgeId)
+        : this.application.core.minecraftConfigurations.getAnnounceMutedPlayer()
+      if (!enabled) return
 
       if (!event.message.startsWith("Hey! I'm currently muted")) return
       if (!event.rawMessage.includes('§eHey!')) return
 
-      let message = this.application.core.languageConfigurations.getAnnounceMutedPlayer()
+      let message = bridgeId
+        ? bridgeConfig.getAnnounceMutedPlayerMessage(
+            bridgeId,
+            this.application.core.languageConfigurations.getAnnounceMutedPlayer()
+          )
+        : this.application.core.languageConfigurations.getAnnounceMutedPlayer()
       message = message.replaceAll('{username}', event.user.displayName())
 
       await this.application.emit('broadcast', {

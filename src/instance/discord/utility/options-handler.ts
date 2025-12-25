@@ -27,6 +27,9 @@ import {
 
 import type UnexpectedErrorHandler from '../../../common/unexpected-error-handler.js'
 
+export const DEFAULT_PAGE_SIZE = 12
+export const MAX_COMPONENTS = 39
+
 export enum OptionType {
   Category = 'category',
   EmbedCategory = 'subcategory',
@@ -150,16 +153,56 @@ interface OptionId {
 
 export class OptionsHandler {
   public static readonly BackButton = 'back-button'
+  public static readonly SearchButton = 'search-button'
+  public static readonly ClearSearchButton = 'clear-search-button'
   private static readonly InactivityTime = 600_000
   private originalReply: InteractionResponse | undefined
   private enabled = true
   private path: string[] = []
   private ids = new Map<string, OptionId>()
+  private searchQuery: string | undefined
+  private pages = new Map<string, number>()
 
   constructor(private readonly mainCategory: CategoryOption | EmbedCategoryOption) {
+    this.rebuildIds()
+
+    // Initialize page state for the current path
+    this.pages.set(this.getPathKey(), 0)
+  }
+
+  /**
+   * Rebuilds the ID map to include any new options that have been added dynamically.
+   * This preserves existing IDs for options that already have them, ensuring
+   * that navigation paths remain valid.
+   */
+  private rebuildIds(): void {
+    // Build a reverse map of existing options to their IDs
+    const existingOptionIds = new Map<OptionItem, string>()
+    for (const [id, entry] of this.ids.entries()) {
+      if (entry.action === 'default') {
+        existingOptionIds.set(entry.item, id)
+      }
+    }
+
+    // Find the current max ID number to continue from
     let currentId = 0
+    for (const id of this.ids.keys()) {
+      const match = /^component-(\d+)$/.exec(id)
+      if (match) {
+        const idNumber = Number.parseInt(match[1], 10)
+        if (idNumber >= currentId) {
+          currentId = idNumber + 1
+        }
+      }
+    }
+
     const allComponents = this.flattenOptions([this.mainCategory])
     for (const component of allComponents) {
+      // Skip if this option already has an ID
+      if (existingOptionIds.has(component)) {
+        continue
+      }
+
       this.ids.set(`component-${currentId++}`, { action: 'default', item: component })
 
       if (component.type === OptionType.List) {
@@ -171,7 +214,17 @@ export class OptionsHandler {
 
   public async forwardInteraction(interaction: ChatInputCommandInteraction, errorHandler: UnexpectedErrorHandler) {
     const originalReply = await interaction.reply({
-      components: [new ViewBuilder(this.mainCategory, this.ids, this.path, this.enabled).create()],
+      components: [
+        new ViewBuilder(
+          this.mainCategory,
+          this.ids,
+          this.path,
+          this.enabled,
+          this.searchQuery,
+          this.pages.get(this.getPathKey()) ?? 0,
+          DEFAULT_PAGE_SIZE
+        ).create()
+      ],
       flags: MessageFlags.IsComponentsV2,
       allowedMentions: { parse: [] }
     })
@@ -192,15 +245,43 @@ export class OptionsHandler {
         .then(async () => {
           const alreadyReplied = await this.handleInteraction(messageInteraction, errorHandler)
 
-          await (alreadyReplied
-            ? this.updateView()
-            : messageInteraction.update({
-                components: [new ViewBuilder(this.mainCategory, this.ids, this.path, this.enabled).create()],
-                flags: MessageFlags.IsComponentsV2,
-                allowedMentions: { parse: [] }
-              }))
+          // Rebuild IDs to pick up any dynamically added options
+          this.rebuildIds()
+
+          // Check if the message interaction is still valid before trying to update
+          if (messageInteraction.deferred || messageInteraction.replied) {
+            await this.updateView()
+          } else {
+            await messageInteraction.update({
+              components: [
+                new ViewBuilder(
+                  this.mainCategory,
+                  this.ids,
+                  this.path,
+                  this.enabled,
+                  this.searchQuery,
+                  this.pages.get(this.getPathKey()) ?? 0,
+                  DEFAULT_PAGE_SIZE
+                ).create()
+              ],
+              flags: MessageFlags.IsComponentsV2,
+              allowedMentions: { parse: [] }
+            })
+          }
         })
-        .catch(errorHandler.promiseCatch('updating container'))
+        .catch((error) => {
+          // Log the error but don't try to acknowledge the interaction again
+          errorHandler.promiseCatch('updating container')(error)
+          // If interaction is still valid, try to update it with error state
+          if (!messageInteraction.deferred && !messageInteraction.replied) {
+            messageInteraction.update({
+              components: [],
+              flags: MessageFlags.IsComponentsV2
+            }).catch(() => {
+              // Ignore errors when trying to clean up failed interactions
+            })
+          }
+        })
     })
 
     collector.on('end', () => {
@@ -210,29 +291,140 @@ export class OptionsHandler {
   }
 
   private async updateView(interaction?: ModalMessageModalSubmitInteraction): Promise<void> {
+    // Rebuild IDs to pick up any dynamically added options
+    this.rebuildIds()
+
     if (interaction !== undefined) {
-      await interaction.update({
-        components: [new ViewBuilder(this.mainCategory, this.ids, this.path, this.enabled).create()],
-        flags: MessageFlags.IsComponentsV2,
-        allowedMentions: { parse: [] }
-      })
+      // Check if the modal interaction is still valid before updating
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.update({
+          components: [
+            new ViewBuilder(
+              this.mainCategory,
+              this.ids,
+              this.path,
+              this.enabled,
+              this.searchQuery,
+              this.pages.get(this.getPathKey()) ?? 0,
+              DEFAULT_PAGE_SIZE
+            ).create()
+          ],
+          flags: MessageFlags.IsComponentsV2,
+          allowedMentions: { parse: [] }
+        })
+      }
       return
     }
 
-    assert.ok(this.originalReply)
-    await this.originalReply.edit({
-      components: [new ViewBuilder(this.mainCategory, this.ids, this.path, this.enabled).create()],
-      flags: MessageFlags.IsComponentsV2,
-      allowedMentions: { parse: [] }
-    })
+    // Check if original reply is still available
+    if (!this.originalReply) {
+      // Original reply is not available for update
+      return
+    }
+
+    try {
+      await this.originalReply.edit({
+        components: [
+          new ViewBuilder(
+            this.mainCategory,
+            this.ids,
+            this.path,
+            this.enabled,
+            this.searchQuery,
+            this.pages.get(this.getPathKey()) ?? 0,
+            DEFAULT_PAGE_SIZE
+          ).create()
+        ],
+        flags: MessageFlags.IsComponentsV2,
+        allowedMentions: { parse: [] }
+      })
+    } catch (error) {
+      // If the message was deleted or we can't edit it, just log and continue
+      // Could not update original reply, message might have been deleted
+    }
   }
 
   private async handleInteraction(
     interaction: CollectedInteraction,
     errorHandler: UnexpectedErrorHandler
   ): Promise<boolean> {
+    // Page navigation handling
+    if (typeof interaction.customId === 'string' && interaction.customId.startsWith('options:page:')) {
+      assert.ok(interaction.isButton())
+
+      const part = interaction.customId.split(':')[2]
+      const key = this.getPathKey()
+      const current = this.pages.get(key) ?? 0
+
+      // Compute bounds
+      const currentCategory = this.getCurrentCategory()
+      const totalOptions = currentCategory.options.length
+      const totalPages = Math.max(1, Math.ceil(totalOptions / DEFAULT_PAGE_SIZE))
+
+      let nextPage = current
+      if (part === 'next') nextPage = Math.min(totalPages - 1, current + 1)
+      else if (part === 'prev') nextPage = Math.max(0, current - 1)
+      else {
+        const parsed = Number.parseInt(part, 10)
+        if (!Number.isNaN(parsed)) nextPage = Math.max(0, Math.min(totalPages - 1, parsed))
+      }
+
+      this.pages.set(key, nextPage)
+      return false
+    }
+
+    // Search handling
+    if (interaction.customId === OptionsHandler.SearchButton) {
+      assert.ok(interaction.isButton())
+
+      await interaction.showModal({
+        customId: 'settings-search',
+        title: 'Search Settings',
+        components: [
+          {
+            type: ComponentType.ActionRow,
+            components: [
+              {
+                type: ComponentType.TextInput,
+                customId: 'settings-search-input',
+                style: TextInputStyle.Short,
+                label: 'Filter options by text',
+                required: false,
+                value: this.searchQuery ?? undefined
+              }
+            ]
+          }
+        ]
+      })
+
+      interaction
+        .awaitModalSubmit({
+          time: 300_000,
+          filter: (modalInteraction) => modalInteraction.user.id === interaction.user.id
+        })
+        .then(async (modalInteraction) => {
+          assert.ok(modalInteraction.isFromMessage())
+
+          const value = modalInteraction.fields.getTextInputValue('settings-search-input').trim()
+          this.searchQuery = value.length === 0 ? undefined : value
+          await this.updateView(modalInteraction)
+        })
+        .catch(errorHandler.promiseCatch('handling search modal submit'))
+
+      return true
+    }
+
+    if (interaction.customId === OptionsHandler.ClearSearchButton) {
+      this.searchQuery = undefined
+      // reset page for current path
+      this.pages.set(this.getPathKey(), 0)
+      return false
+    }
+
     if (interaction.customId === OptionsHandler.BackButton) {
       this.path.pop()
+      // reset page for new current path
+      this.pages.set(this.getPathKey(), 0)
       return false
     }
 
@@ -246,6 +438,8 @@ export class OptionsHandler {
         assert.ok(action === 'default')
 
         this.path.push(interaction.customId)
+        // Reset page for the new path
+        this.pages.set(this.getPathKey(), 0)
         return false
       }
 
@@ -503,26 +697,111 @@ export class OptionsHandler {
 
     return flatOptions
   }
+
+  private getPathKey(): string {
+    return this.path.join('|')
+  }
+
+  private getCurrentCategory(): CategoryOption | EmbedCategoryOption {
+    if (this.path.length === 0) return this.mainCategory
+
+    const lastPath = this.path.at(-1)
+    assert.ok(lastPath)
+
+    const category = this.ids.get(lastPath)?.item
+    assert.ok(category !== undefined, `Can not find path to the category. Given: ${this.path.join(', ')}`)
+    assert.ok(category.type === OptionType.Category || category.type === OptionType.EmbedCategory)
+
+    return category
+  }
 }
 
 class ViewBuilder {
   private hasCreated = false
 
-  private titleCreated = false
   private separatorApplied = false
   private categoryEnded = false
   private components: ComponentInContainerData[] = []
+  private skipped = false
 
   constructor(
     private readonly mainCategory: CategoryOption | EmbedCategoryOption,
     private readonly ids: Map<string, OptionId>,
     private readonly path: string[],
-    private readonly enabled: boolean
+    private readonly enabled: boolean,
+    private readonly searchQuery: string | undefined,
+    private readonly page: number,
+    private readonly pageSize: number,
+    private titleCreated = false
   ) {}
 
   public create(): ContainerComponentData {
     if (this.hasCreated) throw new Error('This instance has already been used to create a view.')
     this.hasCreated = true
+
+    // If a search query is set, build a search results category and render it
+    if (this.searchQuery !== undefined && this.searchQuery.length > 0) {
+      const lowerQuery = this.searchQuery.toLowerCase()
+
+      const flattened = this.flattenWithPath(this.mainCategory)
+
+      const matchedOptions = flattened
+        .filter(({ item, path }) => {
+          let haystack = `${path.join(' > ')} ${item.name} ${item.description ?? ''}`
+
+          try {
+            switch (item.type) {
+              case OptionType.Label: {
+                if (item.getOption !== undefined) haystack += ` ${item.getOption()}`
+                break
+              }
+              case OptionType.Boolean: {
+                haystack += ` ${item.getOption()}`
+                break
+              }
+              case OptionType.Text: {
+                haystack += ` ${item.getOption()}`
+                break
+              }
+              case OptionType.Number: {
+                haystack += ` ${item.getOption()}`
+                break
+              }
+              case OptionType.List:
+              case OptionType.PresetList: {
+                haystack += ` ${(item.getOption() as unknown as string[]).join(' ')}`
+                break
+              }
+              case OptionType.Channel:
+              case OptionType.Role:
+              case OptionType.User: {
+                haystack += ` ${(item.getOption() as unknown as string[]).join(' ')}`
+                break
+              }
+              default:
+              // No-op
+            }
+          } catch {
+            // ignore errors while trying to introspect options
+          }
+
+          return haystack.toLowerCase().includes(lowerQuery)
+        })
+        .map(({ item, path }) => {
+          // shallow copy with prefixed name to include parent path context
+          const prefixedName = path.length > 0 ? `${path.join(' > ')} > ${item.name}` : item.name
+          return { ...item, name: prefixedName } as OptionItem
+        })
+
+      const searchCategory: CategoryOption = {
+        type: OptionType.Category,
+        name: `Search results for "${escapeMarkdown(this.searchQuery)}"`,
+        options: matchedOptions
+      }
+
+      this.createCategoryView(searchCategory)
+      return { type: ComponentType.Container, components: this.components } satisfies ContainerComponentData
+    }
 
     this.createCategoryView(this.getOption())
     return { type: ComponentType.Container, components: this.components } satisfies ContainerComponentData
@@ -531,61 +810,380 @@ class ViewBuilder {
   private createCategoryView(categoryOption: CategoryOption | EmbedCategoryOption): void {
     this.addTitleIfPossible(categoryOption)
 
+    // Build option blocks (each option may produce multiple components)
+    const optionBlocks: ComponentInContainerData[][] = []
+
     for (const option of categoryOption.options) {
       this.handleEndCategory()
+      const block: ComponentInContainerData[] = []
 
       switch (option.type) {
         case OptionType.Category: {
-          this.addCategory(option)
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+
+          block.push({
+            type: ComponentType.Section,
+            components: [{ type: ComponentType.TextDisplay, content: label }],
+            accessory: {
+              type: ComponentType.Button,
+              disabled: !this.enabled,
+              label: 'Open',
+              style: ButtonStyle.Primary,
+              customId: this.getId(option)
+            }
+          } as SectionComponentData)
           break
         }
+
         case OptionType.EmbedCategory: {
-          this.addEmbedCategory(option)
+          this.tryApplySeperator(SeparatorSpacingSize.Small)
+
+          let label = `## ${option.name}`
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+
+          block.push({ type: ComponentType.TextDisplay, content: label })
+
+          // Recurse into embed category and push its blocks inline
+          const nestedBuilder = new ViewBuilder(option, this.ids, [], this.enabled, undefined, 0, this.pageSize, true)
+          const nested = nestedBuilder.create()
+          block.push(...(nested.components as ComponentInContainerData[]))
+
+          this.categoryEnded = true
           break
         }
+
         case OptionType.Label: {
-          this.addLabel(option)
+          let message = `**${option.name}**`
+          if (option.description !== undefined) message += `\n-# ${option.description}`
+          if (option.getOption !== undefined) message += `\n-# **Current Value:** ${escapeMarkdown(option.getOption())}`
+          block.push({ type: ComponentType.TextDisplay, content: message })
 
           break
         }
+
         case OptionType.Boolean: {
-          this.addBoolean(option)
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+
+          block.push({
+            type: ComponentType.Section,
+            components: [{ type: ComponentType.TextDisplay, content: label }],
+            accessory: {
+              type: ComponentType.Button,
+              disabled: !this.enabled,
+              label: option.getOption() ? 'ON' : 'OFF',
+              style: option.getOption() ? ButtonStyle.Success : ButtonStyle.Secondary,
+              customId: this.getId(option)
+            }
+          })
+
           break
         }
+
         case OptionType.List: {
-          this.addList(option)
+          const addAction = [...this.ids.entries()].find(([, entry]) => entry.item === option && entry.action === 'add')
+          assert.ok(addAction !== undefined, 'Could not find add action?')
+
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+          block.push({
+            type: ComponentType.Section,
+            components: [{ type: ComponentType.TextDisplay, content: label }],
+            accessory: {
+              type: ComponentType.Button,
+              disabled: !this.enabled,
+              customId: addAction[0],
+              label: 'Add',
+              style: ButtonStyle.Primary
+            }
+          })
+
+          const deleteAction = [...this.ids.entries()].find(
+            ([, entry]) => entry.item === option && entry.action === 'delete'
+          )
+          assert.ok(deleteAction !== undefined, 'Could not find delete action?')
+
+          const mentionedValues = new Set<string>()
+          const values = []
+          for (const value of option.getOption()) {
+            if (mentionedValues.has(value)) continue
+            mentionedValues.add(value)
+
+            values.push({
+              label: this.shortenString(value, 100),
+              value: hashOptionValue(value)
+            })
+          }
+
+          if (values.length > 0) {
+            block.push({
+              type: ComponentType.ActionRow,
+              components: [
+                {
+                  type: ComponentType.StringSelect,
+                  customId: deleteAction[0],
+                  disabled: !this.enabled,
+                  placeholder: 'Select from the list to DELETE.',
+
+                  minValues: option.min,
+                  maxValues: Math.min(values.length, option.max),
+
+                  options: values
+                }
+              ]
+            })
+          } else {
+            block.push({
+              type: ComponentType.ActionRow,
+              components: [
+                {
+                  type: ComponentType.StringSelect,
+                  customId: deleteAction[0],
+                  disabled: true,
+                  placeholder: '(empty)',
+
+                  minValues: 0,
+                  maxValues: 1,
+
+                  options: [{ label: '(empty)', value: '0' }]
+                }
+              ]
+            })
+          }
+
           break
         }
+
         case OptionType.PresetList: {
-          this.addPresetList(option)
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+
+          const currentSelection = option.getOption()
+          if (currentSelection.length > 1) {
+            label += `\n-# **Selected:** ${currentSelection.length} option${currentSelection.length === 1 ? '' : 's'}`
+          }
+
+          block.push({ type: ComponentType.TextDisplay, content: label })
+
+          const selectOptions = option.options.map((opt) => ({
+            label: opt.label,
+            value: opt.value,
+            description: opt.description,
+            default: currentSelection.includes(opt.value)
+          }))
+
+          block.push({
+            type: ComponentType.ActionRow,
+            components: [
+              {
+                type: ComponentType.StringSelect,
+                customId: this.getId(option),
+                disabled: !this.enabled,
+                placeholder: currentSelection.length > 0 ? `${currentSelection.length} selected` : 'Select options...',
+                minValues: option.min,
+                maxValues: Math.min(option.options.length, option.max),
+                options: selectOptions
+              }
+            ]
+          })
+
           break
         }
+
         case OptionType.Channel: {
-          this.addChannel(option)
+          assert.ok(option.type === OptionType.Channel)
+
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+          block.push({ type: ComponentType.TextDisplay, content: label })
+
+          block.push({
+            type: ComponentType.ActionRow,
+            components: [
+              {
+                type: ComponentType.ChannelSelect,
+                customId: this.getId(option),
+                disabled: !this.enabled,
+                minValues: option.min,
+                maxValues: option.max,
+                channelTypes: [ChannelType.GuildText],
+                defaultValues: option.getOption().map((o) => ({ id: o, type: SelectMenuDefaultValueType.Channel }))
+              }
+            ]
+          })
+
           break
         }
+
         case OptionType.Role: {
-          this.addRole(option)
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+          block.push({ type: ComponentType.TextDisplay, content: label })
+
+          block.push({
+            type: ComponentType.ActionRow,
+            components: [
+              {
+                type: ComponentType.RoleSelect,
+                customId: this.getId(option),
+                disabled: !this.enabled,
+                minValues: option.min,
+                maxValues: option.max,
+                defaultValues: option.getOption().map((o) => ({ id: o, type: SelectMenuDefaultValueType.Role }))
+              }
+            ]
+          })
+
           break
         }
+
         case OptionType.User: {
-          this.addUser(option)
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+          block.push({ type: ComponentType.TextDisplay, content: label })
+
+          block.push({
+            type: ComponentType.ActionRow,
+            components: [
+              {
+                type: ComponentType.UserSelect,
+                customId: this.getId(option),
+                disabled: !this.enabled,
+                minValues: option.min,
+                maxValues: option.max,
+                defaultValues: option.getOption().map((o) => ({ id: o, type: SelectMenuDefaultValueType.User }))
+              }
+            ]
+          })
+
           break
         }
+
         case OptionType.Text: {
-          this.addText(option)
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+          let buttonLabel: string
+
+          switch (option.style) {
+            case InputStyle.Tiny: {
+              buttonLabel = option.getOption()
+              break
+            }
+            case InputStyle.Short:
+            case InputStyle.Long: {
+              buttonLabel = 'Edit'
+              label += `\n> -# ${escapeMarkdown(this.shortenString(option.getOption(), 200))}`
+            }
+          }
+
+          block.push({
+            type: ComponentType.Section,
+            components: [{ type: ComponentType.TextDisplay, content: label }],
+            accessory: {
+              type: ComponentType.Button,
+              disabled: !this.enabled,
+              label: buttonLabel,
+              style: ButtonStyle.Primary,
+              customId: this.getId(option)
+            }
+          })
+
           break
         }
+
         case OptionType.Number: {
-          this.addNumber(option)
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+
+          block.push({
+            type: ComponentType.Section,
+            components: [{ type: ComponentType.TextDisplay, content: label }],
+            accessory: {
+              type: ComponentType.Button,
+              disabled: !this.enabled,
+              label: option.getOption().toString(10),
+              style: ButtonStyle.Primary,
+              customId: this.getId(option)
+            }
+          })
+
           break
         }
+
         case OptionType.Action: {
-          this.addAction(option)
+          let label = bold(option.name)
+          if (option.description !== undefined) label += `\n-# ${option.description}`
+
+          block.push({
+            type: ComponentType.Section,
+            components: [{ type: ComponentType.TextDisplay, content: label }],
+            accessory: {
+              type: ComponentType.Button,
+              disabled: !this.enabled,
+              label: option.label,
+              style: option.style,
+              customId: this.getId(option)
+            }
+          })
+
           break
         }
         // No default
       }
+
+      optionBlocks.push(block)
+    }
+
+    // Apply pagination by options
+    const totalPages = Math.max(1, Math.ceil(optionBlocks.length / this.pageSize))
+    const page = Math.max(0, Math.min(this.page, totalPages - 1))
+    const start = page * this.pageSize
+    const end = start + this.pageSize
+
+    for (const block of optionBlocks.slice(start, end)) {
+      for (const component of block) {
+        this.append(component)
+      }
+    }
+
+    // If there are multiple pages, add pager controls
+    if (totalPages > 1) {
+      const pageText = { type: ComponentType.TextDisplay, content: `Page ${page + 1} / ${totalPages}` }
+      this.append({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            customId: `options:page:prev`,
+            label: 'Prev',
+            style: ButtonStyle.Secondary,
+            disabled: page === 0
+          },
+          {
+            type: ComponentType.Button,
+            customId: `options:page:next`,
+            label: 'Next',
+            style: ButtonStyle.Primary,
+            disabled: page === totalPages - 1
+          }
+        ]
+      })
+      this.append(pageText)
+    }
+
+    // Safety clamp: ensure we never exceed MAX_COMPONENTS
+    if (this.skipped || this.countTotalComponents(this.components) > MAX_COMPONENTS) {
+      const noteComponent: ComponentInContainerData = {
+        type: ComponentType.TextDisplay,
+        content: '**Note:** Too many items to display. Narrow your selection or use search.'
+      }
+      const noteCount = this.getComponentCount(noteComponent)
+
+      while (this.components.length > 0 && this.countTotalComponents(this.components) + noteCount > MAX_COMPONENTS) {
+        this.components.pop()
+      }
+      this.components.push(noteComponent)
     }
   }
 
@@ -611,6 +1209,32 @@ class ViewBuilder {
           }
         })
       }
+
+      // Add search controls (available everywhere)
+      this.append({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            label: this.searchQuery ? `Search (edit)` : 'Search',
+            customId: OptionsHandler.SearchButton,
+            style: ButtonStyle.Primary,
+            disabled: !this.enabled
+          },
+          {
+            type: ComponentType.Button,
+            label: 'Clear Search',
+            customId: OptionsHandler.ClearSearchButton,
+            style: ButtonStyle.Secondary,
+            disabled: !this.enabled || this.searchQuery === undefined
+          }
+        ]
+      })
+
+      if (this.searchQuery !== undefined && this.searchQuery.length > 0) {
+        this.append({ type: ComponentType.TextDisplay, content: `**Search:** ${escapeMarkdown(this.searchQuery)}` })
+      }
+
       if ('header' in currentCategory && currentCategory.header !== undefined) {
         this.append({ type: ComponentType.TextDisplay, content: currentCategory.header })
       } else if (currentCategory.description !== undefined) {
@@ -914,8 +1538,39 @@ class ViewBuilder {
     }
   }
 
+  private countTotalComponents(components: ComponentInContainerData[]): number {
+    let count = 0
+    for (const component of components) {
+      count++
+      if ('components' in component && Array.isArray(component.components)) {
+        count += this.countTotalComponents(component.components as ComponentInContainerData[])
+      }
+      if ('accessory' in component && component.accessory !== undefined) {
+        count++
+      }
+    }
+    return count
+  }
+
+  private getComponentCount(component: ComponentInContainerData): number {
+    let count = 1
+    if ('components' in component && Array.isArray(component.components)) {
+      count += this.countTotalComponents(component.components as ComponentInContainerData[])
+    }
+    if ('accessory' in component && component.accessory !== undefined) {
+      count++
+    }
+    return count
+  }
+
   private append(component: ComponentInContainerData): void {
     assert.ok(component.type !== ComponentType.Separator, 'use applySeperator() instead')
+
+    // Check if adding this component would exceed Discord's component limit
+    if (this.countTotalComponents(this.components) + this.getComponentCount(component) > MAX_COMPONENTS) {
+      this.skipped = true
+      return
+    }
 
     this.components.push(component)
     this.separatorApplied = false
@@ -923,7 +1578,16 @@ class ViewBuilder {
 
   private tryApplySeperator(size: SeparatorSpacingSize): void {
     if (this.separatorApplied) return
-    this.components.push({ type: ComponentType.Separator, spacing: size })
+
+    const separator: ComponentInContainerData = { type: ComponentType.Separator, spacing: size }
+
+    // Check if adding this separator would exceed Discord's component limit
+    if (this.countTotalComponents(this.components) + this.getComponentCount(separator) > MAX_COMPONENTS) {
+      this.skipped = true
+      return
+    }
+
+    this.components.push(separator)
     this.separatorApplied = true
   }
 
@@ -938,6 +1602,25 @@ class ViewBuilder {
     assert.ok(category.type === OptionType.Category || category.type === OptionType.EmbedCategory)
 
     return category
+  }
+
+  private flattenWithPath(
+    current: CategoryOption | EmbedCategoryOption,
+    parentPath: string[] = []
+  ): { item: OptionItem; path: string[] }[] {
+    const results: { item: OptionItem; path: string[] }[] = []
+
+    for (const option of current.options) {
+      // Include the option itself
+      results.push({ item: option, path: parentPath })
+
+      // Recurse into categories
+      if (option.type === OptionType.Category || option.type === OptionType.EmbedCategory) {
+        results.push(...this.flattenWithPath(option, [...parentPath, option.name]))
+      }
+    }
+
+    return results
   }
 
   private createTitle(): string {
@@ -965,6 +1648,8 @@ class ViewBuilder {
     return value.slice(0, max - suffix.length) + suffix
   }
 }
+
+export { ViewBuilder }
 
 export async function getNumber(
   interaction: MessageComponentInteraction | CommandInteraction,

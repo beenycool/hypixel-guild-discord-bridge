@@ -32,4 +32,36 @@ export class CommandsConfigurations {
   public setDisabledCommands(disabledCommands: string[]): void {
     this.configuration.setStringArray('disabledCommands', disabledCommands)
   }
+
+  public getExplainCommandOnHelp(): boolean {
+    return this.configuration.getBoolean('explainCommandOnHelp', true)
+  }
+
+  public setExplainCommandOnHelp(enabled: boolean): void {
+    this.configuration.setBoolean('explainCommandOnHelp', enabled)
+  }
+
+  public getSuggestOnTypo(): boolean {
+    return this.configuration.getBoolean('suggestOnTypo', true)
+  }
+
+  public setSuggestOnTypo(enabled: boolean): void {
+    this.configuration.setBoolean('suggestOnTypo', enabled)
+  }
+
+  public getTypoSuggestionThreshold(): number {
+    return this.configuration.getNumber('typoSuggestionThreshold', 0.6)
+  }
+
+  public setTypoSuggestionThreshold(threshold: number): void {
+    this.configuration.setNumber('typoSuggestionThreshold', threshold)
+  }
+
+  public getTypoCooldownSeconds(): number {
+    return this.configuration.getNumber('typoCooldownSeconds', 30)
+  }
+
+  public setTypoCooldownSeconds(seconds: number): void {
+    this.configuration.setNumber('typoCooldownSeconds', seconds)
+  }
 }

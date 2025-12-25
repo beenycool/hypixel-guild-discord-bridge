@@ -35,7 +35,8 @@ export default {
         return
       }
 
-      const { filteredMessage, changed } = context.application.core.filterProfanity(playerMessage)
+      const bridgeId = context.clientInstance.bridgeId
+      const { filteredMessage, changed } = context.application.core.filterProfanityForBridge(playerMessage, bridgeId)
       if (changed) {
         await context.application.emit('profanityWarning', {
           ...context.eventHelper.fillBaseEvent(),

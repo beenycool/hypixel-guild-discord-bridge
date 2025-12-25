@@ -21,12 +21,16 @@ import { setTimeoutAsync } from '../../utility/scheduling'
 
 import AboutCommand from './commands/about.js'
 import AcceptCommand from './commands/accept.js'
+import BlacklistCommand from './commands/blacklist.js'
 import ConnectivityCommand from './commands/connectivity.js'
 import CreateLeaderboardCommand from './commands/create-leaderboard.js'
 import DemoteCommand from './commands/demote.js'
 import DisconnectCommand from './commands/disconnect.js'
 import ExecuteCommand from './commands/execute.js'
+import GexpCheckCommand from './commands/gexp-check.js'
+import GuildTopCommand from './commands/guildtop.js'
 import HelpCommand from './commands/help.js'
+import InactivityCommand from './commands/inactivity.js'
 import InviteCommand from './commands/invite.js'
 import JoinCommand from './commands/join.js'
 import LeaderboardCommand from './commands/leaderboard.js'
@@ -39,9 +43,11 @@ import ProfanityCommand from './commands/profanity.js'
 import PromoteCommand from './commands/promote.js'
 import PunishmentsCommand from './commands/punishments.js'
 import ReconnectCommand from './commands/reconnect.js'
+import RequirementsCommand from './commands/requirements.js'
 import RestartCommand from './commands/restart.js'
 import SetrankCommand from './commands/setrank.js'
 import SettingsCommand from './commands/settings.js'
+import SkyblockCommand from './commands/skyblock.js'
 import UnlinkCommand from './commands/unlink.js'
 import VerificationCommand from './commands/verification.js'
 import { DefaultCommandFooter } from './common/discord-config.js'
@@ -107,12 +113,16 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
       SettingsCommand,
       ConnectivityCommand,
       CreateLeaderboardCommand,
+      GexpCheckCommand,
+      GuildTopCommand,
       DemoteCommand,
       DisconnectCommand,
       HelpCommand,
       InviteCommand,
+      InactivityCommand,
       JoinCommand,
       LeaderboardCommand,
+      BlacklistCommand,
       LinkCommand,
       ListCommand,
       ListLeaderboardCommand,
@@ -123,9 +133,11 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
       PromoteCommand,
       PunishmentsCommand,
       ReconnectCommand,
+      RequirementsCommand,
       SetrankCommand,
       RestartCommand,
       UnlinkCommand,
+      SkyblockCommand,
       VerificationCommand
     ]
 
@@ -148,7 +160,8 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
     const user = await this.application.core.initializeDiscordUser(identifier, {
       guild: interaction.guild ?? undefined
     })
-    const permission = user.permission()
+    const bridgeId = this.application.bridgeResolver.getBridgeIdForChannel(interaction.channelId)
+    const permission = user.permission(bridgeId)
     if (command.autoComplete) {
       const context: DiscordAutoCompleteContext = {
         application: this.application,
@@ -159,7 +172,8 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
         user: user,
         permission: permission,
         interaction: interaction,
-        allCommands: [...this.commands.values()]
+        allCommands: [...this.commands.values()],
+        bridgeId: bridgeId
       }
 
       try {
@@ -181,7 +195,8 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
     const command = this.commands.get(interaction.commandName)
 
     try {
-      const channelType = this.getChannelType(interaction.channelId)
+      const bridgeId = this.application.bridgeResolver.getBridgeIdForChannel(interaction.channelId)
+      const channelType = this.getChannelType(interaction.channelId, bridgeId)
       const identifier = this.clientInstance.profileByUser(
         interaction.user,
         interaction.inCachedGuild() ? interaction.member : undefined
@@ -189,7 +204,7 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
       const user = await this.application.core.initializeDiscordUser(identifier, {
         guild: interaction.guild ?? undefined
       })
-      const permission = user.permission()
+      const permission = user.permission(bridgeId)
 
       if (command == undefined) {
         this.logger.debug(`command but it doesn't exist: ${interaction.commandName}`)
@@ -217,6 +232,20 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
       if (scopeCheck !== undefined) {
         this.logger.debug(`can't execute in channel ${interaction.channelId}`)
         await interaction.reply({ content: scopeCheck, flags: MessageFlags.Ephemeral })
+        return
+      }
+
+      const instanceName = interaction.options.getString('instance')
+      if (
+        instanceName !== null &&
+        bridgeId !== undefined &&
+        !this.application.bridgeResolver.shouldProcessEvent(bridgeId, instanceName)
+      ) {
+        this.logger.debug(`instance ${instanceName} does not belong to bridge ${bridgeId}`)
+        await interaction.reply({
+          content: `The instance \`${instanceName}\` does not belong to this bridge!`,
+          flags: MessageFlags.Ephemeral
+        })
         return
       }
 
@@ -256,6 +285,7 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
         permission: permission,
         interaction: interaction,
         allCommands: [...this.commands.values()],
+        bridgeId: bridgeId,
 
         showPermissionDenied: async (requiredPermission: Exclude<Permission, Permission.Anyone>) => {
           if (interaction.deferred || interaction.replied) {
@@ -331,7 +361,14 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
     }
   }
 
-  private getChannelType(channelId: string): ChannelType | undefined {
+  private getChannelType(channelId: string, bridgeId?: string): ChannelType | undefined {
+    if (bridgeId !== undefined) {
+      const type = this.application.bridgeResolver.getChannelTypeForChannel(channelId)
+      if (type === 'public') return ChannelType.Public
+      if (type === 'officer') return ChannelType.Officer
+      return undefined
+    }
+
     const config = this.application.core.discordConfigurations
     if (config.getPublicChannelIds().includes(channelId)) return ChannelType.Public
     if (config.getOfficerChannelIds().includes(channelId)) return ChannelType.Officer

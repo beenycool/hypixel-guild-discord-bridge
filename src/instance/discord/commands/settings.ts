@@ -13,7 +13,7 @@ import {
 
 import type Application from '../../../application.js'
 import { Color, InstanceType, Permission } from '../../../common/application-event.js'
-import type { DiscordCommandHandler } from '../../../common/commands.js'
+import type { DiscordCommandContext, DiscordCommandHandler } from '../../../common/commands.js'
 import type UnexpectedErrorHandler from '../../../common/unexpected-error-handler.js'
 import { translateInstanceMessage, translateInstanceStatus } from '../../../core/instance/instance-language'
 import { ApplicationLanguages } from '../../../core/language-configurations'
@@ -21,6 +21,7 @@ import type { ProxyConfig } from '../../../core/minecraft/sessions-manager'
 import { ProxyProtocol } from '../../../core/minecraft/sessions-manager'
 import { SpontaneousEventsNames } from '../../../core/spontanmous-events-configurations'
 import Duration from '../../../utility/duration'
+import { SkyblockEventKeys } from '../../../utility/skyblock-calendar'
 import { Timeout } from '../../../utility/timeout.js'
 import { DefaultCommandFooter } from '../common/discord-config.js'
 import type { CategoryOption, EmbedCategoryOption } from '../utility/options-handler.js'
@@ -39,9 +40,20 @@ const CategoryLabel =
 export default {
   getCommandBuilder: () =>
     new SlashCommandBuilder().setName('settings').setDescription('Control application settings.'),
-  permission: Permission.Admin,
+  permission: Permission.Officer,
 
   handler: async function (context) {
+    const isGlobalAdmin = context.permission === Permission.Admin
+    const bridgeId = context.bridgeId
+
+    if (!isGlobalAdmin && bridgeId === undefined) {
+      await context.interaction.reply({
+        content: 'You do not have permission to use this command here.',
+        flags: MessageFlags.Ephemeral
+      })
+      return
+    }
+
     const options: EmbedCategoryOption = {
       type: OptionType.EmbedCategory,
       get name() {
@@ -52,24 +64,33 @@ export default {
       },
 
       options: [
-        {
-          type: OptionType.Label,
-          name: 'Admins',
-          description:
-            'Users who have admin permission on the application. Check `/help` for all commands available to you.',
-          getOption: () =>
-            context.application.discordInstance
-              .getStaticConfig()
-              .adminIds.map((adminId) => `<@${adminId}>`)
-              .join(', ')
-        },
-        fetchGeneralOptions(context.application),
-        fetchDiscordOptions(context.application),
-        fetchMinecraftOptions(context.application),
-        fetchModerationOptions(context.application),
-        fetchQualityOptions(context.application),
-        fetchCommandsOptions(context.application),
-        fetchLanguageOptions(context.application)
+        ...(isGlobalAdmin
+          ? [
+              {
+                type: OptionType.Label,
+                name: 'Admins',
+                description:
+                  'Users who have admin permission on the application. Check `/help` for all commands available to you.',
+                getOption: () =>
+                  context.application.discordInstance
+                    .getStaticConfig()
+                    .adminIds.map((adminId) => `<@${adminId}>`)
+                    .join(', ')
+              } satisfies CategoryOption['options'][number],
+              fetchGeneralOptions(context.application)
+            ]
+          : []),
+        fetchBridgeOptions(context.application, context),
+        ...(isGlobalAdmin
+          ? [
+              fetchDiscordOptions(context.application),
+              fetchMinecraftOptions(context.application),
+              fetchModerationOptions(context.application),
+              fetchQualityOptions(context.application),
+              fetchCommandsOptions(context.application),
+              fetchLanguageOptions(context.application)
+            ]
+          : [])
       ]
     }
 
@@ -105,6 +126,787 @@ function fetchGeneralOptions(application: Application): CategoryOption {
         }
       }
     ]
+  }
+}
+
+/**
+ * Creates a bridge option category for a specific bridge ID
+ * Each bridge has its own complete settings panel
+ */
+function createBridgeOption(
+  application: Application,
+  bridgeId: string,
+  bridgeSubOptions: CategoryOption['options']
+): CategoryOption {
+  const bridgeConfig = application.core.bridgeConfigurations
+
+  // Dynamic Skyblock options for per-event toggling
+  const skyblockEventOptions = SkyblockEventKeys.map((key) => ({
+    type: OptionType.Boolean,
+    // name typed as any to satisfy Option typing (key is a constant string union)
+    name: key as any,
+    description: `Enable notifications for ${key}`,
+    getOption: () => bridgeConfig.getSkyblockEventNotifiers(bridgeId)?.[key] ?? true,
+    toggleOption: () => {
+      const current = bridgeConfig.getSkyblockEventNotifiers(bridgeId) ?? {}
+      bridgeConfig.setSkyblockEventNotifier(bridgeId, key, !(current[key] ?? true))
+      application.emit('bridgeConfigChanged', {
+        bridgeId,
+        key: `${bridgeId}_skyblockNotifiers`,
+        value: { [key]: !(current[key] ?? true) }
+      })
+    }
+  }))
+
+  return {
+    type: OptionType.Category,
+    name: `Bridge: ${bridgeId}`,
+    description: `Configure bridge "${bridgeId}"`,
+    header:
+      `**Bridge Configuration: ${bridgeId}**\n\n` +
+      `Each bridge has its own complete settings. Configure channels, roles, and behavior for this bridge.\n` +
+      `Messages will only be routed between instances/channels in the same bridge.`,
+    options: [
+      // ========== Channels Category ==========
+      {
+        type: OptionType.Category,
+        name: 'Channels',
+        description: 'Configure Discord channels for this bridge',
+        header: `**Channel Configuration for ${bridgeId}**\n\nSet up the Discord channels that will be connected to this bridge.`,
+        options: [
+          {
+            type: OptionType.Channel,
+            name: `Public Channels ${Essential}`,
+            description: `Public guild chat channels for bridge "${bridgeId}"`,
+            min: 0,
+            max: 5,
+            getOption: () => bridgeConfig.getPublicChannelIds(bridgeId),
+            setOption: (values) => {
+              bridgeConfig.setPublicChannelIds(bridgeId, values)
+              application.bridgeResolver.rebuildLookupMaps()
+            }
+          },
+          {
+            type: OptionType.Channel,
+            name: `Officer Channels`,
+            description: `Officer guild chat channels for bridge "${bridgeId}"`,
+            min: 0,
+            max: 5,
+            getOption: () => bridgeConfig.getOfficerChannelIds(bridgeId),
+            setOption: (values) => {
+              bridgeConfig.setOfficerChannelIds(bridgeId, values)
+              application.bridgeResolver.rebuildLookupMaps()
+            }
+          },
+          {
+            type: OptionType.Channel,
+            name: `Logger Channels`,
+            description: `Channels where application logs are sent for bridge "${bridgeId}". This is for staff only!`,
+            min: 0,
+            max: 5,
+            getOption: () => bridgeConfig.getLoggerChannelIds(bridgeId),
+            setOption: (values) => {
+              bridgeConfig.setLoggerChannelIds(bridgeId, values)
+            }
+          }
+        ]
+      },
+      // ========== Minecraft Instances ==========
+      {
+        type: OptionType.List,
+        name: `Minecraft Instances`,
+        description: `Minecraft instance names that belong to bridge "${bridgeId}"`,
+        style: InputStyle.Short,
+        min: 0,
+        max: 10,
+        getOption: () => bridgeConfig.getMinecraftInstances(bridgeId),
+        setOption: (values) => {
+          bridgeConfig.setMinecraftInstances(bridgeId, values)
+          application.bridgeResolver.rebuildLookupMaps()
+        }
+      },
+      // ========== Roles Category ==========
+      {
+        type: OptionType.Category,
+        name: 'Staff Roles',
+        description: 'Configure staff roles for this bridge',
+        header: `**Staff Roles for ${bridgeId}**\n\nAssign staff roles that have special permissions in this bridge.`,
+        options: [
+          {
+            type: OptionType.Role,
+            name: 'Helper Roles',
+            description: `Staff roles that have permissions to execute commands such as \`!toggle\` and \`/invite\` in bridge "${bridgeId}"`,
+            min: 0,
+            max: 5,
+            getOption: () => bridgeConfig.getHelperRoleIds(bridgeId),
+            setOption: (values) => {
+              bridgeConfig.setHelperRoleIds(bridgeId, values)
+            }
+          },
+          {
+            type: OptionType.Role,
+            name: 'Officer Roles',
+            description: `Staff roles that have permissions to execute destructive commands such as \`/kick\` in bridge "${bridgeId}"`,
+            min: 0,
+            max: 5,
+            getOption: () => bridgeConfig.getOfficerRoleIds(bridgeId),
+            setOption: (values) => {
+              bridgeConfig.setOfficerRoleIds(bridgeId, values)
+            }
+          }
+        ]
+      },
+      // ========== Discord Settings Category ==========
+      {
+        type: OptionType.Category,
+        name: 'Discord Settings',
+        description: 'Configure Discord behavior for this bridge',
+        header: `**Discord Settings for ${bridgeId}**\n\nConfigure how the bridge interacts with Discord.`,
+        options: [
+          {
+            type: OptionType.Boolean,
+            name: 'Always Reply',
+            description: 'Enable to always send a text reply instead of reactions when a problem occurs.',
+            getOption: () => bridgeConfig.getAlwaysReplyReaction(bridgeId),
+            toggleOption: () => {
+              bridgeConfig.setAlwaysReplyReaction(bridgeId, !bridgeConfig.getAlwaysReplyReaction(bridgeId))
+            }
+          },
+          {
+            type: OptionType.Boolean,
+            name: 'Enforce Verification',
+            description: 'Enable to always require verification via `/verify` to chat using this bridge.',
+            getOption: () => bridgeConfig.getEnforceVerification(bridgeId),
+            toggleOption: () => {
+              bridgeConfig.setEnforceVerification(bridgeId, !bridgeConfig.getEnforceVerification(bridgeId))
+            }
+          },
+          {
+            type: OptionType.Boolean,
+            name: 'Minecraft Text Images',
+            description: 'Render chat messages the same way they are rendered in Minecraft in-game.',
+            getOption: () => bridgeConfig.getTextToImage(bridgeId),
+            toggleOption: () => {
+              bridgeConfig.setTextToImage(bridgeId, !bridgeConfig.getTextToImage(bridgeId))
+            }
+          }
+        ]
+      },
+      // ========== Events Category ==========
+      {
+        type: OptionType.Category,
+        name: 'Minecraft Events',
+        description: 'Configure event notifications for this bridge',
+        header: `**Event Settings for ${bridgeId}**\n\nConfigure how Minecraft events are displayed in Discord.`,
+        options: [
+          {
+            type: OptionType.Boolean,
+            name: `Member Online ${Recommended}`,
+            description: 'Show a temporary message when a guild member comes online.',
+            getOption: () => bridgeConfig.getGuildOnline(bridgeId),
+            toggleOption: () => {
+              bridgeConfig.setGuildOnline(bridgeId, !bridgeConfig.getGuildOnline(bridgeId))
+            }
+          },
+          {
+            type: OptionType.Boolean,
+            name: `Member Offline ${Recommended}`,
+            description: 'Show a temporary message when a guild member goes offline.',
+            getOption: () => bridgeConfig.getGuildOffline(bridgeId),
+            toggleOption: () => {
+              bridgeConfig.setGuildOffline(bridgeId, !bridgeConfig.getGuildOffline(bridgeId))
+            }
+          },
+          {
+            type: OptionType.Number,
+            name: 'Delete Temporary Events After (Seconds)',
+            description: 'How long to keep temporary events (Online/Offline) before deleting them.',
+            min: 1,
+            max: 43_200,
+            getOption: () => bridgeConfig.getDurationTemporarilyInteractions(bridgeId).toSeconds(),
+            setOption: (value) => {
+              bridgeConfig.setDurationTemporarilyInteractions(bridgeId, Duration.seconds(value))
+            }
+          },
+          {
+            type: OptionType.Number,
+            name: 'Max Temporary Events',
+            description: 'How many temporary events to keep before deleting older ones.',
+            min: 1,
+            max: 1000,
+            getOption: () => bridgeConfig.getMaxTemporarilyInteractions(bridgeId),
+            setOption: (value) => {
+              bridgeConfig.setMaxTemporarilyInteractions(bridgeId, value)
+            }
+          }
+        ]
+      },
+      // ========== Skyblock Events ==========
+      {
+        type: OptionType.Category,
+        name: 'Skyblock Events',
+        description: 'Configure Skyblock event notifications for this bridge',
+        header: `**Skyblock Events for ${bridgeId}**\n\nConfigure Skyblock event notifications.`,
+        options: [
+          {
+            type: OptionType.Boolean,
+            name: 'Skyblock Events',
+            description: 'Enable or disable Skyblock event notifications for this bridge',
+            getOption: () => bridgeConfig.getSkyblockEventsEnabled(bridgeId),
+            toggleOption: () => {
+              const newValue = !bridgeConfig.getSkyblockEventsEnabled(bridgeId)
+              bridgeConfig.setSkyblockEventsEnabled(bridgeId, newValue)
+              application.emit('bridgeConfigChanged', {
+                bridgeId,
+                key: `${bridgeId}_skyblockEventsEnabled`,
+                value: newValue
+              })
+            }
+          },
+          {
+            type: OptionType.EmbedCategory,
+            name: 'Skyblock Reminders',
+            description: 'Special Skyblock event reminders.',
+            options: [
+              {
+                type: OptionType.Boolean,
+                name: 'Dark Auction Reminder',
+                description: 'Send a reminder when a skyblock dark auction is starting.',
+                getOption: () => bridgeConfig.getDarkAuctionReminder(bridgeId),
+                toggleOption: () => {
+                  bridgeConfig.setDarkAuctionReminder(bridgeId, !bridgeConfig.getDarkAuctionReminder(bridgeId))
+                }
+              },
+              {
+                type: OptionType.Boolean,
+                name: 'Starfall Cult Reminder',
+                description: 'Send a reminder when the skyblock starfall cult gathers.',
+                getOption: () => bridgeConfig.getStarfallCultReminder(bridgeId),
+                toggleOption: () => {
+                  bridgeConfig.setStarfallCultReminder(bridgeId, !bridgeConfig.getStarfallCultReminder(bridgeId))
+                }
+              }
+            ]
+          },
+          ...skyblockEventOptions
+        ]
+      },
+      // ========== Quality of Life ==========
+      {
+        type: OptionType.Category,
+        name: 'Quality of Life',
+        description: 'Guild reactions and automated features',
+        header: `**Quality of Life Settings**\n\nConfigure automated reactions and reminders.\n\n${CategoryLabel}`,
+        options: [
+          {
+            type: OptionType.EmbedCategory,
+            name: 'Guild Reactions',
+            description: 'Auto replying and reacting to various in-game guild events.',
+            options: [
+              {
+                type: OptionType.Boolean,
+                name: 'Guild Join Reaction',
+                description: 'Send a greeting message when a member joins the guild.',
+                getOption: () => bridgeConfig.getJoinGuildReaction(bridgeId),
+                toggleOption: () => {
+                  bridgeConfig.setJoinGuildReaction(bridgeId, !bridgeConfig.getJoinGuildReaction(bridgeId))
+                }
+              },
+              {
+                type: OptionType.Boolean,
+                name: 'Guild Leave Reaction',
+                description: 'Send a reaction message when a member leaves the guild.',
+                getOption: () => bridgeConfig.getLeaveGuildReaction(bridgeId),
+                toggleOption: () => {
+                  bridgeConfig.setLeaveGuildReaction(bridgeId, !bridgeConfig.getLeaveGuildReaction(bridgeId))
+                }
+              },
+              {
+                type: OptionType.Boolean,
+                name: 'Guild Kick Reaction',
+                description: 'Send a reaction message when a member is kicked from the guild.',
+                getOption: () => bridgeConfig.getKickGuildReaction(bridgeId),
+                toggleOption: () => {
+                  bridgeConfig.setKickGuildReaction(bridgeId, !bridgeConfig.getKickGuildReaction(bridgeId))
+                }
+              }
+            ]
+          },
+          {
+            type: OptionType.Boolean,
+            name: 'Announce Player Muted',
+            description:
+              'Announce to the guild about a player being muted when they send `/immuted` to the application in-game.',
+            getOption: () => bridgeConfig.getAnnounceMutedPlayer(bridgeId),
+            toggleOption: () => {
+              bridgeConfig.setAnnounceMutedPlayer(bridgeId, !bridgeConfig.getAnnounceMutedPlayer(bridgeId))
+            }
+          }
+        ]
+      },
+      // ========== Custom Messages ==========
+      {
+        type: OptionType.Category,
+        name: 'Custom Messages',
+        description: 'Customize automated messages and reactions',
+        header: `**Custom Messages**\n\nCustomize the messages sent by the bot for various events.`,
+        options: [
+          {
+            type: OptionType.Category,
+            name: 'Guild Reaction Messages',
+            description: 'Custom messages for guild join/leave/kick events.',
+            options: [
+              {
+                type: OptionType.List,
+                name: 'Join Message List',
+                description: 'Messages sent when a member joins the guild. Use {username} for the player name.',
+                style: InputStyle.Long,
+                min: 0,
+                max: 20,
+                getOption: () =>
+                  bridgeConfig.getGuildJoinReactionMessages(
+                    bridgeId,
+                    application.core.languageConfigurations.getGuildJoinReaction()
+                  ),
+                setOption: (values) => {
+                  bridgeConfig.setGuildJoinReactionMessages(bridgeId, values)
+                }
+              },
+              {
+                type: OptionType.List,
+                name: 'Leave Message List',
+                description: 'Messages sent when a member leaves the guild. Use {username} for the player name.',
+                style: InputStyle.Long,
+                min: 0,
+                max: 20,
+                getOption: () =>
+                  bridgeConfig.getGuildLeaveReactionMessages(
+                    bridgeId,
+                    application.core.languageConfigurations.getGuildLeaveReaction()
+                  ),
+                setOption: (values) => {
+                  bridgeConfig.setGuildLeaveReactionMessages(bridgeId, values)
+                }
+              },
+              {
+                type: OptionType.List,
+                name: 'Kick Message List',
+                description:
+                  'Messages sent when a member is kicked from the guild. Use {username} for the player name.',
+                style: InputStyle.Long,
+                min: 0,
+                max: 20,
+                getOption: () =>
+                  bridgeConfig.getGuildKickReactionMessages(
+                    bridgeId,
+                    application.core.languageConfigurations.getGuildKickReaction()
+                  ),
+                setOption: (values) => {
+                  bridgeConfig.setGuildKickReactionMessages(bridgeId, values)
+                }
+              }
+            ]
+          },
+          {
+            type: OptionType.Category,
+            name: 'Skyblock Reminder Messages',
+            description: 'Custom messages for Skyblock reminders.',
+            options: [
+              {
+                type: OptionType.Text,
+                name: 'Dark Auction Reminder',
+                description: 'Message sent when dark auction is starting. Use {minutes} for time remaining.',
+                style: InputStyle.Long,
+                min: 2,
+                max: 150,
+                getOption: () =>
+                  bridgeConfig.getDarkAuctionReminderMessage(
+                    bridgeId,
+                    application.core.languageConfigurations.getDarkAuctionReminder()
+                  ),
+                setOption: (value) => {
+                  bridgeConfig.setDarkAuctionReminderMessage(bridgeId, value)
+                }
+              },
+              {
+                type: OptionType.Text,
+                name: 'Starfall Cult Reminder',
+                description: 'Message sent when starfall cult gathers.',
+                style: InputStyle.Long,
+                min: 2,
+                max: 150,
+                getOption: () =>
+                  bridgeConfig.getStarfallReminderMessage(
+                    bridgeId,
+                    application.core.languageConfigurations.getStarfallReminder()
+                  ),
+                setOption: (value) => {
+                  bridgeConfig.setStarfallReminderMessage(bridgeId, value)
+                }
+              }
+            ]
+          },
+          {
+            type: OptionType.Category,
+            name: 'Other Reminder Messages',
+            description: 'Custom messages for other automated reminders.',
+            options: [
+              {
+                type: OptionType.Text,
+                name: 'Announce Player Muted',
+                description: 'Message when a player announces they are muted. Use {username} for the player name.',
+                style: InputStyle.Long,
+                min: 2,
+                max: 150,
+                getOption: () =>
+                  bridgeConfig.getAnnounceMutedPlayerMessage(
+                    bridgeId,
+                    application.core.languageConfigurations.getAnnounceMutedPlayer()
+                  ),
+                setOption: (value) => {
+                  bridgeConfig.setAnnounceMutedPlayerMessage(bridgeId, value)
+                }
+              }
+            ]
+          }
+        ]
+      },
+      // ========== Moderation ==========
+      {
+        type: OptionType.Category,
+        name: 'Moderation',
+        description: 'Configure moderation settings for this bridge',
+        header: `**Moderation Settings for ${bridgeId}**\n\nConfigure heat punishments and profanity filter for this bridge.\nLeave options at default to use global settings.`,
+        options: [
+          {
+            type: OptionType.EmbedCategory,
+            name: 'Heat Punishments',
+            description: 'Limit staff moderation actions per day',
+            options: [
+              {
+                type: OptionType.Boolean,
+                name: `Enable Heat Punishment ${Essential}`,
+                description:
+                  'Enable to set limits to the amount of actions staff can take before being blocked. Leave unchanged to use global setting.',
+                getOption: () =>
+                  bridgeConfig.getHeatPunishmentEnabled(bridgeId) ??
+                  application.core.moderationConfiguration.getHeatPunishment(),
+                toggleOption: () => {
+                  const current = bridgeConfig.getHeatPunishmentEnabled(bridgeId)
+                  const globalValue = application.core.moderationConfiguration.getHeatPunishment()
+                  if (current === undefined) {
+                    // First toggle: set to opposite of global
+                    bridgeConfig.setHeatPunishmentEnabled(bridgeId, !globalValue)
+                  } else {
+                    // Toggle current value
+                    bridgeConfig.setHeatPunishmentEnabled(bridgeId, !current)
+                  }
+                }
+              },
+              {
+                type: OptionType.Number,
+                name: 'Kicks Per Day',
+                description: 'Allowed kicks per day for staff before they are blocked. Set to 0 to use global setting.',
+                min: 0,
+                max: 100,
+                getOption: () =>
+                  bridgeConfig.getKicksPerDay(bridgeId) ?? application.core.moderationConfiguration.getKicksPerDay(),
+                setOption: (value) => {
+                  if (value === 0) {
+                    bridgeConfig.setKicksPerDay(bridgeId, undefined)
+                  } else {
+                    bridgeConfig.setKicksPerDay(bridgeId, value)
+                  }
+                }
+              },
+              {
+                type: OptionType.Number,
+                name: 'Mutes Per Day',
+                description: 'Allowed mutes per day for staff before they are blocked. Set to 0 to use global setting.',
+                min: 0,
+                max: 100,
+                getOption: () =>
+                  bridgeConfig.getMutesPerDay(bridgeId) ?? application.core.moderationConfiguration.getMutesPerDay(),
+                setOption: (value) => {
+                  if (value === 0) {
+                    bridgeConfig.setMutesPerDay(bridgeId, undefined)
+                  } else {
+                    bridgeConfig.setMutesPerDay(bridgeId, value)
+                  }
+                }
+              }
+            ]
+          },
+          {
+            type: OptionType.EmbedCategory,
+            name: 'Immunity List',
+            description: 'Users who are completely immune to heat punishments for this bridge',
+            options: [
+              {
+                type: OptionType.User,
+                name: 'Immune Discord Users',
+                min: 0,
+                max: 10,
+                getOption: () => bridgeConfig.getImmuneDiscordUsers(bridgeId),
+                setOption: (values) => {
+                  bridgeConfig.setImmuneDiscordUsers(bridgeId, values)
+                }
+              },
+              {
+                type: OptionType.List,
+                name: 'Immune Mojang Players',
+                style: InputStyle.Short,
+                min: 0,
+                max: 10,
+                getOption: () => bridgeConfig.getImmuneMojangPlayers(bridgeId),
+                setOption: (values) => {
+                  bridgeConfig.setImmuneMojangPlayers(bridgeId, values)
+                }
+              }
+            ]
+          },
+          {
+            type: OptionType.EmbedCategory,
+            name: 'Profanity Filter',
+            description: 'Filter and censor chat messages for profanity',
+            options: [
+              {
+                type: OptionType.Boolean,
+                name: `Profanity Filter ${Essential}`,
+                description:
+                  'Enable to filter and censor chat messages for profanity. Leave unchanged to use global setting.',
+                getOption: () =>
+                  bridgeConfig.getProfanityEnabled(bridgeId) ??
+                  application.core.moderationConfiguration.getProfanityEnabled(),
+                toggleOption: () => {
+                  const current = bridgeConfig.getProfanityEnabled(bridgeId)
+                  const globalValue = application.core.moderationConfiguration.getProfanityEnabled()
+                  if (current === undefined) {
+                    bridgeConfig.setProfanityEnabled(bridgeId, !globalValue)
+                  } else {
+                    bridgeConfig.setProfanityEnabled(bridgeId, !current)
+                  }
+                }
+              },
+              {
+                type: OptionType.Label,
+                name: 'Profanity List',
+                description: 'Use command `/profanity` to edit the global filter.',
+                getOption: undefined
+              }
+            ]
+          }
+        ]
+      },
+      // ========== Chat Commands ==========
+      {
+        type: OptionType.Category,
+        name: 'Chat Commands',
+        description: 'Configure chat commands for this bridge',
+        header: `**Chat Commands for ${bridgeId}**\n\nConfigure chat commands like \`!cata\` and \`!iq\` for this bridge.\nLeave options at default to use global settings.`,
+        options: [
+          {
+            type: OptionType.Boolean,
+            name: `Enable Chat Commands ${Recommended}`,
+            description: 'Enable commands such as `!cata` and `!iq` for this bridge.',
+            getOption: () =>
+              bridgeConfig.getCommandsEnabled(bridgeId) ?? application.core.commandsConfigurations.getCommandsEnabled(),
+            toggleOption: () => {
+              const current = bridgeConfig.getCommandsEnabled(bridgeId)
+              const globalValue = application.core.commandsConfigurations.getCommandsEnabled()
+              if (current === undefined) {
+                bridgeConfig.setCommandsEnabled(bridgeId, !globalValue)
+              } else {
+                bridgeConfig.setCommandsEnabled(bridgeId, !current)
+              }
+            }
+          },
+          {
+            type: OptionType.Text,
+            name: 'Chat Command Prefix',
+            description: 'Prefix to indicate it is a chat command. Leave empty to use global prefix.',
+            style: InputStyle.Tiny,
+            min: 0,
+            max: 2,
+            getOption: () =>
+              bridgeConfig.getCommandPrefix(bridgeId) ?? application.core.commandsConfigurations.getChatPrefix(),
+            setOption: (newValue) => {
+              if (newValue === '' || newValue === application.core.commandsConfigurations.getChatPrefix()) {
+                bridgeConfig.setCommandPrefix(bridgeId, undefined)
+              } else {
+                bridgeConfig.setCommandPrefix(bridgeId, newValue)
+              }
+            }
+          },
+          {
+            type: OptionType.Label,
+            name: 'Disabled Chat Commands',
+            description: 'Commands disabled for this bridge. Use `!toggle` command to modify.',
+            getOption: () => {
+              const disabledCommands = bridgeConfig.getDisabledCommands(bridgeId)
+              return disabledCommands.length === 0 ? 'none (using global)' : disabledCommands.join(', ')
+            }
+          }
+        ]
+      },
+      // ========== Danger Zone ==========
+      {
+        type: OptionType.Category,
+        name: 'Danger Zone',
+        description: 'Destructive actions for this bridge',
+        header: `**⚠️ Danger Zone for ${bridgeId}**\n\nThese actions cannot be undone!`,
+        options: [
+          {
+            type: OptionType.Action,
+            name: `Delete Bridge`,
+            description: `Permanently delete bridge "${bridgeId}" and all its configurations.`,
+            label: 'delete',
+            style: ButtonStyle.Danger,
+            onInteraction: async (interaction) => {
+              bridgeConfig.removeBridgeId(bridgeId)
+              application.bridgeResolver.rebuildLookupMaps()
+
+              // Remove this bridge from the options list
+              const indexToRemove = bridgeSubOptions.findIndex(
+                (opt) => opt.type === OptionType.Category && opt.name === `Bridge: ${bridgeId}`
+              )
+              if (indexToRemove !== -1) {
+                bridgeSubOptions.splice(indexToRemove, 1)
+              }
+
+              await interaction.reply({
+                embeds: [
+                  {
+                    title: 'Bridge Deleted',
+                    description: `Bridge \`${escapeMarkdown(bridgeId)}\` has been deleted.`,
+                    color: Color.Good,
+                    footer: { text: DefaultCommandFooter }
+                  }
+                ],
+                flags: MessageFlags.Ephemeral
+              })
+              return true
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+
+function fetchBridgeOptions(application: Application, context: DiscordCommandContext): CategoryOption {
+  const bridgeConfig = application.core.bridgeConfigurations
+
+  // Generate options for each existing bridge
+  const bridgeSubOptions: CategoryOption['options'] = []
+
+  // Add option to create a new bridge (Global Admin only)
+  if (context.permission === Permission.Admin) {
+    bridgeSubOptions.push({
+      type: OptionType.Action,
+      name: 'Create New Bridge',
+      description: 'Create a new bridge to connect Minecraft instances to specific Discord channels.',
+      label: 'create',
+      style: ButtonStyle.Success,
+      onInteraction: async (interaction) => {
+        await interaction.showModal({
+          customId: 'bridge-create',
+          title: 'Create New Bridge',
+          components: [
+            {
+              type: ComponentType.ActionRow,
+              components: [
+                {
+                  type: ComponentType.TextInput,
+                  customId: 'bridge-id',
+                  style: TextInputStyle.Short,
+                  label: 'Bridge ID (unique identifier)',
+                  placeholder: 'e.g. guild1, main-guild, etc.',
+                  minLength: 1,
+                  maxLength: 32,
+                  required: true
+                }
+              ]
+            }
+          ]
+        })
+
+        const modalInteraction = await interaction.awaitModalSubmit({
+          time: 300_000,
+          filter: (modalInteraction) => modalInteraction.user.id === interaction.user.id
+        })
+
+        const bridgeId = modalInteraction.fields.getTextInputValue('bridge-id').trim().toLowerCase()
+
+        // Check if bridge already exists
+        const existingBridges = bridgeConfig.getAllBridgeIds()
+        if (existingBridges.includes(bridgeId)) {
+          await modalInteraction.reply({
+            embeds: [
+              {
+                title: 'Bridge Creation Failed',
+                description: `A bridge with ID \`${escapeMarkdown(bridgeId)}\` already exists.`,
+                color: Color.Error,
+                footer: { text: DefaultCommandFooter }
+              }
+            ],
+            flags: MessageFlags.Ephemeral
+          })
+          return true
+        }
+
+        bridgeConfig.addBridgeId(bridgeId)
+        application.bridgeResolver.rebuildLookupMaps()
+
+        // Dynamically add the new bridge option to the options list
+        const newBridgeOption = createBridgeOption(application, bridgeId, bridgeSubOptions)
+        bridgeSubOptions.push(newBridgeOption)
+
+        await modalInteraction.reply({
+          embeds: [
+            {
+              title: 'Bridge Created',
+              description:
+                `Bridge \`${escapeMarkdown(bridgeId)}\` has been created.\n\n` +
+                `**Next steps:**\n` +
+                `1. Go back to Settings → Bridges → ${bridgeId}\n` +
+                `2. Set the Public and Officer channels\n` +
+                `3. Add Minecraft instance names to the bridge`,
+              color: Color.Good,
+              footer: { text: DefaultCommandFooter }
+            }
+          ],
+          flags: MessageFlags.Ephemeral
+        })
+        return true
+      }
+    })
+  }
+
+  // Add existing bridges as sub-options
+  const existingBridges = bridgeConfig.getAllBridgeIds()
+  for (const bridgeId of existingBridges) {
+    // Only show the bridge the command was run in, or all bridges if global admin
+    if (context.permission === Permission.Admin || bridgeId === context.bridgeId) {
+      bridgeSubOptions.push(createBridgeOption(application, bridgeId, bridgeSubOptions))
+    }
+  }
+
+  return {
+    type: OptionType.Category,
+    name: 'Bridges (Multi-Guild)',
+    get header() {
+      const currentBridges = bridgeConfig.getAllBridgeIds()
+      return (
+        '**Multi-Guild Bridge Configuration**\n\n' +
+        'Bridges allow you to run multiple isolated guild chats within a single application.\n' +
+        'Each bridge connects specific Minecraft instances to specific Discord channels.\n\n' +
+        'Messages from a Minecraft instance will only be sent to channels in the same bridge.\n' +
+        'Messages from a Discord channel will only be sent to Minecraft instances in the same bridge.\n\n' +
+        `**Currently configured bridges:** ${currentBridges.length === 0 ? 'None (using legacy single-guild mode)' : currentBridges.join(', ')}`
+      )
+    },
+    options: bridgeSubOptions
   }
 }
 
@@ -586,6 +1388,24 @@ function fetchCommandsOptions(application: Application): CategoryOption {
         getOption: () => commands.getCommandsEnabled(),
         toggleOption: () => {
           commands.setCommandsEnabled(!commands.getCommandsEnabled())
+        }
+      },
+      {
+        type: OptionType.Boolean,
+        name: `Explain Commands on Help ${Recommended}`,
+        description: 'Provide detailed explanations when users type `!<command> help`',
+        getOption: () => commands.getExplainCommandOnHelp(),
+        toggleOption: () => {
+          commands.setExplainCommandOnHelp(!commands.getExplainCommandOnHelp())
+        }
+      },
+      {
+        type: OptionType.Boolean,
+        name: `Suggest on Typo ${Recommended}`,
+        description: 'Suggest similar commands when users type an unknown command',
+        getOption: () => commands.getSuggestOnTypo(),
+        toggleOption: () => {
+          commands.setSuggestOnTypo(!commands.getSuggestOnTypo())
         }
       },
       {
