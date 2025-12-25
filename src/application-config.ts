@@ -85,8 +85,8 @@ export interface InactivityConfig {
 
 export interface SkyblockEventsConfig {
   enabled: boolean
-  notifiers?: Record<string, boolean>
-  customTimes?: Record<string, string[]>
+  notifiers?: { [key: string]: boolean }
+  customTimes?: { [key: string]: string[] }
 }
 
 export interface HypixelUpdatesConfig {
