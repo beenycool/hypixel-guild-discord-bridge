@@ -1,10 +1,13 @@
 import type { APIEmbed } from 'discord.js'
 
-const DefaultMaxLength = 3300
+// Discord's actual embed description limit is 4096 characters
+// We use 4000 to be safe and account for potential formatting overhead
+const DefaultMaxLength = 4000
 
 /**
  * Split a long text into multiple embed pages based on max length.
  * Tries to split at line breaks; if a single line is longer than maxLen, it will be chunked.
+ * Ensures that each embed description does not exceed Discord's 4096 character limit.
  */
 export function splitToEmbeds(base: APIEmbed, text: string, maxLen = DefaultMaxLength): APIEmbed[] {
   const pages: APIEmbed[] = []
@@ -47,5 +50,15 @@ export function splitToEmbeds(base: APIEmbed, text: string, maxLen = DefaultMaxL
   // push last page
   if ((current.description ?? '').length > 0) pages.push(current)
 
-  return pages
+  // Final validation: ensure no embed description exceeds Discord's 4096 character limit
+  const discordMaxLength = 4096
+  return pages.map(page => {
+    const description = page.description ?? ''
+    if (description.length > discordMaxLength) {
+      // If description still exceeds limit, truncate it safely
+      const truncatedDescription = description.substring(0, discordMaxLength - 3) + '...'
+      return { ...page, description: truncatedDescription }
+    }
+    return page
+  })
 }

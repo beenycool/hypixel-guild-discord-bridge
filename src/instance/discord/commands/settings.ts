@@ -81,10 +81,10 @@ export default {
             ]
           : []),
         fetchBridgeOptions(context.application, context),
+        fetchMinecraftOptions(context.application, context),
         ...(isGlobalAdmin
           ? [
               fetchDiscordOptions(context.application),
-              fetchMinecraftOptions(context.application),
               fetchModerationOptions(context.application),
               fetchQualityOptions(context.application),
               fetchCommandsOptions(context.application),
@@ -1675,87 +1675,92 @@ function fetchLanguageOptions(application: Application): CategoryOption {
   }
 }
 
-function fetchMinecraftOptions(application: Application): CategoryOption {
+function fetchMinecraftOptions(application: Application, context: DiscordCommandContext): CategoryOption {
   const minecraft = application.core.minecraftConfigurations
+  const isGlobalAdmin = context.permission === Permission.Admin
 
   return {
     type: OptionType.Category,
     name: 'Minecraft',
     header: CategoryLabel,
     options: [
-      {
-        type: OptionType.EmbedCategory,
-        name: 'Staff Options',
-        description: 'These are dangerous permissions. Make sure you know what you are doing!',
-        options: [
-          {
-            type: OptionType.Text,
+      ...(isGlobalAdmin
+        ? [
+            {
+              type: OptionType.EmbedCategory,
+              name: 'Staff Options',
+              description: 'These are dangerous permissions. Make sure you know what you are doing!',
+              options: [
+                {
+                  type: OptionType.Text,
 
-            name: 'Admin Username',
-            description: 'In-game username of the person who has full permission over the application.',
+                  name: 'Admin Username',
+                  description: 'In-game username of the person who has full permission over the application.',
 
-            style: InputStyle.Tiny,
-            max: 16,
-            min: 2,
+                  style: InputStyle.Tiny,
+                  max: 16,
+                  min: 2,
 
-            getOption: () => minecraft.getAdminUsername(),
-            setOption: (username) => {
-              minecraft.setAdminUsername(username)
+                  getOption: () => minecraft.getAdminUsername(),
+                  setOption: (username) => {
+                    minecraft.setAdminUsername(username)
+                  }
+                }
+              ]
+            },
+            {
+              type: OptionType.Category,
+              name: 'Chat Processing',
+              description: 'Fine tune how chat messages are sent to the game.',
+              header: 'Fine tune how chat messages are sent to the game.\n\n' + CategoryLabel,
+              options: [
+                {
+                  type: OptionType.EmbedCategory,
+                  name: 'Links Processor',
+                  description: 'How to handle links sent to Minecraft.',
+                  options: [
+                    {
+                      type: OptionType.Boolean,
+                      name: 'STuF',
+                      description:
+                        'Bypass Hypixel restriction on hyperlinks using STuF encoding. Only use if you know what STuF is!',
+                      getOption: () => minecraft.getHideLinksViaStuf(),
+                      toggleOption: () => {
+                        minecraft.setHideLinksViaStuf(!minecraft.getHideLinksViaStuf())
+                      }
+                    },
+                    {
+                      type: OptionType.Boolean,
+                      name: `Resolve Links ${Recommended}`,
+                      description: 'Try resolving the link content like `(video)` instead of showing generic `(link)`. ',
+                      getOption: () => minecraft.getResolveHideLinks(),
+                      toggleOption: () => {
+                        minecraft.setResolveHideLinks(!minecraft.getResolveHideLinks())
+                      }
+                    }
+                  ]
+                },
+                {
+                  type: OptionType.EmbedCategory,
+                  name: 'Anti Spam',
+                  description: 'Techniques used to avoid messages being blocked for "can not repeat".',
+                  options: [
+                    {
+                      type: OptionType.Boolean,
+                      name: `Enable Antispam ${Essential}`,
+                      description:
+                        'Use techniques to avoid hypixel blocking a message for "`You cannot say the same message twice!`".',
+                      getOption: () => minecraft.getAntispamEnabled(),
+                      toggleOption: () => {
+                        minecraft.setAntispamEnabled(!minecraft.getAntispamEnabled())
+                      }
+                    }
+                  ]
+                }
+              ]
             }
-          }
-        ]
-      },
-      {
-        type: OptionType.Category,
-        name: 'Chat Processing',
-        description: 'Fine tune how chat messages are sent to the game.',
-        header: 'Fine tune how chat messages are sent to the game.\n\n' + CategoryLabel,
-        options: [
-          {
-            type: OptionType.EmbedCategory,
-            name: 'Links Processor',
-            description: 'How to handle links sent to Minecraft.',
-            options: [
-              {
-                type: OptionType.Boolean,
-                name: 'STuF',
-                description:
-                  'Bypass Hypixel restriction on hyperlinks using STuF encoding. Only use if you know what STuF is!',
-                getOption: () => minecraft.getHideLinksViaStuf(),
-                toggleOption: () => {
-                  minecraft.setHideLinksViaStuf(!minecraft.getHideLinksViaStuf())
-                }
-              },
-              {
-                type: OptionType.Boolean,
-                name: `Resolve Links ${Recommended}`,
-                description: 'Try resolving the link content like `(video)` instead of showing generic `(link)`. ',
-                getOption: () => minecraft.getResolveHideLinks(),
-                toggleOption: () => {
-                  minecraft.setResolveHideLinks(!minecraft.getResolveHideLinks())
-                }
-              }
-            ]
-          },
-          {
-            type: OptionType.EmbedCategory,
-            name: 'Anti Spam',
-            description: 'Techniques used to avoid messages being blocked for "can not repeat".',
-            options: [
-              {
-                type: OptionType.Boolean,
-                name: `Enable Antispam ${Essential}`,
-                description:
-                  'Use techniques to avoid hypixel blocking a message for "`You cannot say the same message twice!`".',
-                getOption: () => minecraft.getAntispamEnabled(),
-                toggleOption: () => {
-                  minecraft.setAntispamEnabled(!minecraft.getAntispamEnabled())
-                }
-              }
-            ]
-          }
-        ]
-      },
+          ]
+        : []),
       {
         type: OptionType.EmbedCategory,
         name: 'Instances',
@@ -1768,7 +1773,7 @@ function fetchMinecraftOptions(application: Application): CategoryOption {
             label: 'fetch',
             style: ButtonStyle.Primary,
 
-            onInteraction: (interaction) => minecraftInstancesStatus(application, interaction)
+            onInteraction: (interaction) => minecraftInstancesStatus(application, interaction, context.bridgeId)
           },
           {
             type: OptionType.Action,
@@ -1778,7 +1783,8 @@ function fetchMinecraftOptions(application: Application): CategoryOption {
             label: 'add',
             style: ButtonStyle.Success,
 
-            onInteraction: (interaction, errorHandler) => minecraftInstanceAdd(application, interaction, errorHandler)
+            onInteraction: (interaction, errorHandler) =>
+              minecraftInstanceAdd(application, interaction, errorHandler, context.bridgeId)
           },
           {
             type: OptionType.Action,
@@ -1789,7 +1795,7 @@ function fetchMinecraftOptions(application: Application): CategoryOption {
             style: ButtonStyle.Danger,
 
             onInteraction: (interaction, errorHandler) =>
-              minecraftInstanceRemove(application, interaction, errorHandler)
+              minecraftInstanceRemove(application, interaction, errorHandler, context.bridgeId)
           }
         ]
       }
@@ -1797,10 +1803,16 @@ function fetchMinecraftOptions(application: Application): CategoryOption {
   }
 }
 
-async function minecraftInstancesStatus(application: Application, interaction: ButtonInteraction): Promise<boolean> {
+async function minecraftInstancesStatus(
+  application: Application,
+  interaction: ButtonInteraction,
+  bridgeId?: string
+): Promise<boolean> {
   const config = application.core.minecraftSessions
   const savedInstances = config.getAllInstances()
   const instances = application.minecraftManager.getAllInstances()
+
+  const bridgeInstances = bridgeId ? application.core.bridgeConfigurations.getMinecraftInstances(bridgeId) : []
 
   const embed: APIEmbed = {
     title: 'Minecraft Status',
@@ -1811,8 +1823,10 @@ async function minecraftInstancesStatus(application: Application, interaction: B
   }
   assert.ok(embed.fields)
 
-  const registeredInstances = instances.filter((instance) =>
-    savedInstances.some((configInstance) => instance.instanceName === configInstance.name)
+  const registeredInstances = instances.filter(
+    (instance) =>
+      savedInstances.some((configInstance) => instance.instanceName === configInstance.name) &&
+      (!bridgeId || bridgeInstances.includes(instance.instanceName))
   )
   embed.fields.push({
     name: 'Registered Instances',
@@ -1825,7 +1839,9 @@ async function minecraftInstancesStatus(application: Application, interaction: B
   } satisfies APIEmbedField)
 
   const dynamicInstances = instances.filter(
-    (instance) => !savedInstances.some((configInstance) => instance.instanceName === configInstance.name)
+    (instance) =>
+      !savedInstances.some((configInstance) => instance.instanceName === configInstance.name) &&
+      (!bridgeId || bridgeInstances.includes(instance.instanceName))
   )
   if (dynamicInstances.length > 0) {
     embed.fields.push({
@@ -1838,7 +1854,11 @@ async function minecraftInstancesStatus(application: Application, interaction: B
 
   const unavailableInstances = savedInstances
     .map((instance) => instance.name)
-    .filter((configName) => !instances.some((instance) => instance.instanceName === configName))
+    .filter(
+      (configName) =>
+        !instances.some((instance) => instance.instanceName === configName) &&
+        (!bridgeId || bridgeInstances.includes(configName))
+    )
   if (unavailableInstances.length > 0) {
     embed.color = Color.Bad
     embed.description =
@@ -1863,7 +1883,8 @@ async function minecraftInstancesStatus(application: Application, interaction: B
 async function minecraftInstanceAdd(
   application: Application,
   interaction: ButtonInteraction,
-  errorHandler: UnexpectedErrorHandler
+  errorHandler: UnexpectedErrorHandler,
+  bridgeId?: string
 ): Promise<boolean> {
   await interaction.showModal({
     customId: 'minecraft-instance-add',
@@ -2034,6 +2055,15 @@ async function minecraftInstanceAdd(
 
     application.core.minecraftSessions.addInstance({ name: instanceName, proxy: proxy })
     embed.description += `- Instance has been added to settings for future reboot\n`
+
+    if (bridgeId) {
+      const instances = application.core.bridgeConfigurations.getMinecraftInstances(bridgeId)
+      if (!instances.includes(instanceName)) {
+        instances.push(instanceName)
+        application.core.bridgeConfigurations.setMinecraftInstances(bridgeId, instances)
+        embed.description += `- Instance has been associated with this bridge\n`
+      }
+    }
   } catch (error: unknown) {
     embed.description += `- ERROR: Failed to add minecraft instance. ${errorMessage(error)}\n`
     embed.color = Color.Error
@@ -2050,7 +2080,8 @@ async function minecraftInstanceAdd(
 async function minecraftInstanceRemove(
   application: Application,
   interaction: ButtonInteraction,
-  errorHandler: UnexpectedErrorHandler
+  errorHandler: UnexpectedErrorHandler,
+  bridgeId?: string
 ): Promise<boolean> {
   await interaction.showModal({
     customId: 'minecraft-instance-remove',
@@ -2080,6 +2111,18 @@ async function minecraftInstanceRemove(
   })
 
   const instanceName = modalInteraction.fields.getTextInputValue('instance-name')
+
+  if (bridgeId) {
+    const bridgeInstances = application.core.bridgeConfigurations.getMinecraftInstances(bridgeId)
+    if (!bridgeInstances.includes(instanceName)) {
+      await modalInteraction.reply({
+        content: `Instance **${instanceName}** is not associated with this bridge.`,
+        ephemeral: true
+      })
+      return true
+    }
+  }
+
   const deferredReply = await modalInteraction.deferReply()
 
   const embed = {
@@ -2115,6 +2158,16 @@ async function minecraftInstanceRemove(
 
     if (results.deletedSessionFiles > 0) {
       embed.description += '- Session files have been detected and deleted.'
+    }
+
+    if (bridgeId) {
+      const instances = application.core.bridgeConfigurations.getMinecraftInstances(bridgeId)
+      const index = instances.indexOf(instanceName)
+      if (index !== -1) {
+        instances.splice(index, 1)
+        application.core.bridgeConfigurations.setMinecraftInstances(bridgeId, instances)
+        embed.description += '- Instance has been removed from this bridge association.\n'
+      }
     }
   } catch (error: unknown) {
     errorHandler.error('removing minecraft instance', error)
