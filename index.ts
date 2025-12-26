@@ -31,6 +31,59 @@ const RootDirectory = import.meta.dirname
 const ConfigsDirectory = path.resolve(RootDirectory, 'config')
 fs.mkdirSync(ConfigsDirectory, { recursive: true })
 
+// Start a lightweight health/proxy server immediately to satisfy Azure startup probes.
+// It listens on the external port (WEBSITES_PORT) and responds 200 on `/uptime` quickly.
+// All other requests are proxied to the internal application port (INTERNAL_PORT) so
+// the real web server can boot on the internal port without exposing the slow startup window.
+import http from 'node:http'
+
+const externalPort = Number(process.env.WEBSITES_PORT ?? process.env.PORT ?? 9091)
+const internalPort = Number(process.env.INTERNAL_PORT ?? String(externalPort + 1))
+
+const healthServer = http.createServer((req, res) => {
+  try {
+    const url = req.url ?? '/'
+    if (url.split('?')[0] === '/uptime' || url.split('?')[0] === '/health') {
+      // Respond immediately for probes
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true }))
+      return
+    }
+
+    // Proxy other requests to the internal server
+    const proxy = http.request(
+      { hostname: '127.0.0.1', port: internalPort, path: url, method: req.method, headers: req.headers },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode ?? 200, proxyRes.headers)
+        proxyRes.pipe(res, { end: true })
+      }
+    )
+
+    proxy.on('error', () => {
+      res.writeHead(502)
+      res.end('Bad gateway')
+    })
+
+    req.pipe(proxy, { end: true })
+  } catch (err) {
+    res.writeHead(500)
+    res.end('Internal error')
+  }
+})
+
+healthServer.on('clientError', () => {
+  // ignore occasional client errors from probes
+})
+
+healthServer.listen(externalPort, () => {
+  // avoid log4js (not configured yet), use console for early message
+  console.log(`Health proxy listening on port ${externalPort} → proxying to ${internalPort}`)
+})
+
+process.on('SIGINT', () => healthServer.close())
+process.on('SIGTERM', () => healthServer.close())
+
+
 const LoggerConfigName = 'log4js-config.json'
 const LoggerPath = path.join(ConfigsDirectory, LoggerConfigName)
 if (!fs.existsSync(LoggerPath)) {
