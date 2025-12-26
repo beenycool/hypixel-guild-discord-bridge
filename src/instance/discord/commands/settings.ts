@@ -482,6 +482,7 @@ function createBridgeOption(
                 style: InputStyle.Long,
                 min: 0,
                 max: 20,
+                showDelete: false,
                 getOption: () =>
                   bridgeConfig.getGuildJoinReactionMessages(
                     bridgeId,
@@ -498,6 +499,7 @@ function createBridgeOption(
                 style: InputStyle.Long,
                 min: 0,
                 max: 20,
+                showDelete: false,
                 getOption: () =>
                   bridgeConfig.getGuildLeaveReactionMessages(
                     bridgeId,
@@ -515,6 +517,7 @@ function createBridgeOption(
                 style: InputStyle.Long,
                 min: 0,
                 max: 20,
+                showDelete: false,
                 getOption: () =>
                   bridgeConfig.getGuildKickReactionMessages(
                     bridgeId,

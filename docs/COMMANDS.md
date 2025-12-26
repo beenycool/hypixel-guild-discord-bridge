@@ -68,6 +68,7 @@ A shorter version can also be used: `!- rtca`
 | `megawalls`      | Returns a player's Megawalls stats                                                 |
 | `murdermystery`  | Returns a player's Murder Mystery stats                                            |
 | `mute`           | mute a random online person for 5 minutes for no good reason                       |
+| `name`           | Returns a player's name history                                                    |
 | `networth`       | Networth of specified user.                                                        |
 | `paintball`      | Returns a player's Paintball stats                                                 |
 | `parties`        | List all active parties in guild                                                   |
@@ -139,6 +140,7 @@ A shorter version can also be used: `!- rtca`
 | `/list-leaderboard`   | List all existing leaderboards                                   |
 | `/list`               | List players in your guild(s)                                    |
 | `/log`                | View guild activity logs                                         |
+| `/names`              | Returns a player's name history                                  |
 | `/ping`               | Discord Ping                                                     |
 | `/player`             | View a player's Hypixel profile                                  |
 | `/profanity`          | Manage application profanity filter                              |

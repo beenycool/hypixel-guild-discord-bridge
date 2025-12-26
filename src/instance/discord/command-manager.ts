@@ -38,6 +38,7 @@ import LinkCommand from './commands/link.js'
 import ListLeaderboardCommand from './commands/list-leaderboard'
 import ListCommand from './commands/list.js'
 import LogCommand from './commands/log.js'
+import NamesCommand from './commands/names.js'
 import PingCommand from './commands/ping.js'
 import ProfanityCommand from './commands/profanity.js'
 import PromoteCommand from './commands/promote.js'
@@ -125,6 +126,7 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
       BlacklistCommand,
       LinkCommand,
       ListCommand,
+      NamesCommand,
       ListLeaderboardCommand,
       LogCommand,
       ExecuteCommand,

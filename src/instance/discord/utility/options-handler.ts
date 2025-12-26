@@ -105,6 +105,8 @@ export interface ListOption extends BaseOption {
   style: InputStyle.Long | InputStyle.Short
   max: number
   min: number
+  // When false, the delete action and UI will not be created/rendered for this list
+  showDelete?: boolean
 }
 
 export interface PresetListOption extends BaseOption {
@@ -207,7 +209,10 @@ export class OptionsHandler {
 
       if (component.type === OptionType.List) {
         this.ids.set(`component-${currentId++}`, { action: 'add', item: component })
-        this.ids.set(`component-${currentId++}`, { action: 'delete', item: component })
+        // Only create delete action if the option allows it (default is to allow delete)
+        if ((component as ListOption).showDelete !== false) {
+          this.ids.set(`component-${currentId++}`, { action: 'delete', item: component })
+        }
       }
     }
   }
@@ -899,57 +904,61 @@ class ViewBuilder {
             }
           })
 
-          const deleteAction = [...this.ids.entries()].find(
-            ([, entry]) => entry.item === option && entry.action === 'delete'
-          )
-          assert.ok(deleteAction !== undefined, 'Could not find delete action?')
-
-          const mentionedValues = new Set<string>()
-          const values = []
-          for (const value of option.getOption()) {
-            if (mentionedValues.has(value)) continue
-            mentionedValues.add(value)
-
-            values.push({
-              label: this.shortenString(value, 100),
-              value: hashOptionValue(value)
-            })
-          }
-
-          if (values.length > 0) {
-            block.push({
-              type: ComponentType.ActionRow,
-              components: [
-                {
-                  type: ComponentType.StringSelect,
-                  customId: deleteAction[0],
-                  disabled: !this.enabled,
-                  placeholder: 'Select from the list to DELETE.',
-
-                  minValues: option.min,
-                  maxValues: Math.min(values.length, option.max),
-
-                  options: values
-                }
-              ]
-            })
+          if ((option as ListOption).showDelete === false) {
+            // Deletion disabled for this list; do not render delete controls.
           } else {
-            block.push({
-              type: ComponentType.ActionRow,
-              components: [
-                {
-                  type: ComponentType.StringSelect,
-                  customId: deleteAction[0],
-                  disabled: true,
-                  placeholder: '(empty)',
+            const deleteAction = [...this.ids.entries()].find(
+              ([, entry]) => entry.item === option && entry.action === 'delete'
+            )
+            assert.ok(deleteAction !== undefined, 'Could not find delete action?')
 
-                  minValues: 0,
-                  maxValues: 1,
+            const mentionedValues = new Set<string>()
+            const values = []
+            for (const value of option.getOption()) {
+              if (mentionedValues.has(value)) continue
+              mentionedValues.add(value)
 
-                  options: [{ label: '(empty)', value: '0' }]
-                }
-              ]
-            })
+              values.push({
+                label: this.shortenString(value, 100),
+                value: hashOptionValue(value)
+              })
+            }
+
+            if (values.length > 0) {
+              block.push({
+                type: ComponentType.ActionRow,
+                components: [
+                  {
+                    type: ComponentType.StringSelect,
+                    customId: deleteAction[0],
+                    disabled: !this.enabled,
+                    placeholder: 'Select from the list to DELETE.',
+
+                    minValues: option.min,
+                    maxValues: Math.min(values.length, option.max),
+
+                    options: values
+                  }
+                ]
+              })
+            } else {
+              block.push({
+                type: ComponentType.ActionRow,
+                components: [
+                  {
+                    type: ComponentType.StringSelect,
+                    customId: deleteAction[0],
+                    disabled: true,
+                    placeholder: '(empty)',
+
+                    minValues: 0,
+                    maxValues: 1,
+
+                    options: [{ label: '(empty)', value: '0' }]
+                  }
+                ]
+              })
+            }
           }
 
           break

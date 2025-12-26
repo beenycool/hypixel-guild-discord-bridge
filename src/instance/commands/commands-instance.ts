@@ -56,6 +56,7 @@ import List from './triggers/list.js'
 import MagicalPower from './triggers/magicalpower.js'
 import Mayor from './triggers/mayor.js'
 import Mute from './triggers/mute.js'
+import NameHistory from './triggers/name.js'
 import Networth from './triggers/networth.js'
 import PartyManager from './triggers/party.js'
 import PersonalBest from './triggers/personal-best.js'
@@ -145,6 +146,7 @@ export class CommandsInstance extends ConnectableInstance<InstanceType.Commands>
       new MagicalPower(),
       new Mayor(),
       new Mute(),
+      new NameHistory(),
       new Networth(),
       ...new PartyManager().resolveCommands(),
       new PersonalBest(),
