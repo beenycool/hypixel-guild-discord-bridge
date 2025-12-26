@@ -41,6 +41,7 @@ import http from 'node:http'
 
 const externalPort = Number(process.env.WEBSITES_PORT ?? process.env.PORT ?? 9091)
 const internalPort = Number(process.env.INTERNAL_PORT ?? String(externalPort + 1))
+const processStartTime = Date.now()
 
 const healthServer = http.createServer((req, res) => {
   try {
@@ -48,7 +49,13 @@ const healthServer = http.createServer((req, res) => {
     if (url.split('?')[0] === '/uptime' || url.split('?')[0] === '/health') {
       // Respond immediately for probes
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ success: true }))
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          uptime: Date.now() - processStartTime,
+          version: PackageJson?.version ?? process.env.npm_package_version
+        })
+      )
       return
     }
 

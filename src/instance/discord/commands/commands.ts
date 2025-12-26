@@ -24,6 +24,7 @@ import type Application from '../../../application.js'
 import { Color, Permission } from '../../../common/application-event.js'
 import type { DiscordCommandContext, DiscordCommandHandler } from '../../../common/commands.js'
 import type UnexpectedErrorHandler from '../../../common/unexpected-error-handler.js'
+import { CommandConfigManager } from '../../../common/command-config-manager.js'
 import { DefaultCommandFooter } from '../common/discord-config.js'
 
 // Session state management for command custom IDs
@@ -32,6 +33,7 @@ const MAX_SESSION_AGE = 600_000 // 10 minutes
 
 interface CommandInfo {
   name: string
+  originalName?: string // Original command name before any customizations
   description: string
   category?: string
   triggers?: string[] // For Minecraft commands
@@ -47,6 +49,8 @@ interface SessionState {
   selectedCategory?: string
   selectedCommand?: CommandInfo
   timestamp: number
+  isAdmin: boolean
+  commandConfigManager: CommandConfigManager
 }
 
 export default {
@@ -60,16 +64,25 @@ export default {
     const { application, interaction, errorHandler } = context
 
     try {
+      // Get command configuration manager
+      const commandConfigManager = new CommandConfigManager(application, application.logger)
+      
+      // Check admin permissions
+      const isAdmin = context.permission === Permission.Admin
+      const bridgeId = context.bridgeId
+
       // Generate session token for state management
       const sessionToken = generateSessionToken()
       const sessionState: SessionState = {
         currentTab: 'discord',
         currentPage: 0,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        isAdmin,
+        commandConfigManager
       }
 
       // Discover all commands
-      const commands = await discoverAllCommands(application)
+      const commands = await discoverAllCommands(application, commandConfigManager, isAdmin)
       
       // Send initial response with tabs
       const reply = await sendInitialResponse(interaction, commands, sessionState, sessionToken, application)
@@ -90,7 +103,11 @@ export default {
 /**
  * Discover all commands dynamically by scanning the directories
  */
-async function discoverAllCommands(application: Application): Promise<{
+async function discoverAllCommands(
+  application: Application,
+  commandConfigManager: CommandConfigManager,
+  isAdmin: boolean
+): Promise<{
   discord: CommandInfo[]
   minecraft: CommandInfo[]
 }> {
@@ -110,8 +127,19 @@ async function discoverAllCommands(application: Application): Promise<{
 
         if (module?.getCommandBuilder) {
           const builder = module.getCommandBuilder()
+          const commandName = builder.name
+          
+          // Check if command is disabled (for non-admins)
+          if (!isAdmin && !commandConfigManager.isCommandEnabled('discord', commandName)) {
+            continue
+          }
+          
+          // Get custom display name if configured
+          const displayName = commandConfigManager.getCommandDisplayName('discord', commandName)
+          
           const commandInfo: CommandInfo = {
-            name: builder.name,
+            name: displayName,
+            originalName: commandName,
             description: builder.description,
             isDiscordCommand: true,
             permission: module.permission,
@@ -139,23 +167,45 @@ async function discoverAllCommands(application: Application): Promise<{
           if (module.resolveCommands) {
             const resolvedCommands = module.resolveCommands()
             for (const resolvedCommand of resolvedCommands) {
+              const commandTrigger = resolvedCommand.triggers[0]
+              
+              // Check if command is disabled (for non-admins)
+              if (!isAdmin && !commandConfigManager.isCommandEnabled('minecraft', commandTrigger)) {
+                continue
+              }
+              
+              // Get custom display name if configured
+              const displayName = commandConfigManager.getCommandDisplayName('minecraft', commandTrigger)
+              
               const commandInfo: CommandInfo = {
-                name: resolvedCommand.triggers[0],
+                name: displayName,
+                originalName: commandTrigger,
                 description: resolvedCommand.description,
                 triggers: resolvedCommand.triggers,
                 isDiscordCommand: false,
-                category: categorizeMinecraftCommand(resolvedCommand.triggers[0])
+                category: categorizeMinecraftCommand(commandTrigger)
               }
               minecraftCommands.push(commandInfo)
             }
           } else {
             // Regular ChatCommandHandler
+            const commandTrigger = module.triggers[0]
+            
+            // Check if command is disabled (for non-admins)
+            if (!isAdmin && !commandConfigManager.isCommandEnabled('minecraft', commandTrigger)) {
+              continue
+            }
+            
+            // Get custom display name if configured
+            const displayName = commandConfigManager.getCommandDisplayName('minecraft', commandTrigger)
+            
             const commandInfo: CommandInfo = {
-              name: module.triggers[0],
+              name: displayName,
+              originalName: commandTrigger,
               description: module.description,
               triggers: module.triggers,
               isDiscordCommand: false,
-              category: categorizeMinecraftCommand(module.triggers[0])
+              category: categorizeMinecraftCommand(commandTrigger)
             }
             minecraftCommands.push(commandInfo)
           }
@@ -364,6 +414,15 @@ async function setupComponentCollector(
           application,
           errorHandler
         )
+      } else if (messageInteraction.isModalSubmit()) {
+        await handleModalSubmit(
+          messageInteraction,
+          commands,
+          sessionState,
+          sessionToken,
+          application,
+          errorHandler
+        )
       }
     } catch (error) {
       errorHandler.promiseCatch('commands component interaction')(error)
@@ -446,6 +505,35 @@ async function handleButtonInteraction(
 
     case 'back-to-list':
       await updateCommandList(interaction, commands, sessionState, sessionToken, application)
+      break
+
+    // Admin actions
+    case 'admin-rename':
+      if (sessionState.isAdmin && sessionData.data) {
+        const commandIndex = parseInt(sessionData.data, 10)
+        await showRenameModal(interaction, commands, sessionState, sessionToken, commandIndex, application)
+      }
+      break
+
+    case 'admin-toggle':
+      if (sessionState.isAdmin && sessionData.data) {
+        const commandIndex = parseInt(sessionData.data, 10)
+        await toggleCommand(interaction, commands, sessionState, sessionToken, commandIndex, application)
+      }
+      break
+
+    case 'admin-audit':
+      if (sessionState.isAdmin && sessionData.data) {
+        const commandIndex = parseInt(sessionData.data, 10)
+        await showAuditLog(interaction, commands, sessionState, sessionToken, commandIndex, application)
+      }
+      break
+
+    case 'admin-confirm-disable':
+      if (sessionState.isAdmin && sessionData.data) {
+        const commandIndex = parseInt(sessionData.data, 10)
+        await confirmDisableCommand(interaction, commands, sessionState, sessionToken, commandIndex, application)
+      }
       break
   }
 }
@@ -799,7 +887,32 @@ async function showCommandDetails(
     })
   }
 
-  const components = [
+  // Show command status and custom name for admins
+  if (sessionState.isAdmin) {
+    const commandType = command.isDiscordCommand ? 'discord' : 'minecraft'
+    const commandIdentifier = command.originalName || command.name
+    const isEnabled = sessionState.commandConfigManager.isCommandEnabled(commandType, commandIdentifier)
+    const customName = sessionState.commandConfigManager.getCommandDisplayName(commandType, commandIdentifier)
+    const isCustomName = customName !== commandIdentifier
+
+    embed.fields!.push({
+      name: i18n.t(($) => $['discord.commands.commands.details.status']),
+      value: isEnabled 
+        ? i18n.t(($) => $['discord.commands.commands.details.enabled'])
+        : i18n.t(($) => $['discord.commands.commands.details.disabled']),
+      inline: true
+    })
+
+    if (isCustomName) {
+      embed.fields!.push({
+        name: i18n.t(($) => $['discord.commands.commands.details.custom-name']),
+        value: customName,
+        inline: true
+      })
+    }
+  }
+
+  const components: any[] = [
     {
       type: ComponentType.ActionRow,
       components: [
@@ -813,6 +926,52 @@ async function showCommandDetails(
       ]
     }
   ]
+
+  // Add admin buttons if user is admin
+  if (sessionState.isAdmin) {
+    const adminButtons: any[] = []
+
+    // Rename button
+    adminButtons.push({
+      type: ComponentType.Button,
+      customId: `${SESSION_PREFIX}${sessionToken}:admin-rename:${commandIndex}`,
+      label: i18n.t(($) => $['discord.commands.commands.admin.rename.button']),
+      style: ButtonStyle.Primary,
+      emoji: '✏️'
+    })
+
+    // Toggle enable/disable button
+    const isEnabled = sessionState.commandConfigManager.isCommandEnabled(
+      command.isDiscordCommand ? 'discord' : 'minecraft',
+      command.originalName || command.name
+    )
+    adminButtons.push({
+      type: ComponentType.Button,
+      customId: `${SESSION_PREFIX}${sessionToken}:admin-toggle:${commandIndex}`,
+      label: isEnabled 
+        ? i18n.t(($) => $['discord.commands.commands.admin.toggle.disable'])
+        : i18n.t(($) => $['discord.commands.commands.admin.toggle.enable']),
+      style: isEnabled ? ButtonStyle.Danger : ButtonStyle.Success,
+      emoji: isEnabled ? '🚫' : '✅'
+    })
+
+    // Audit log button
+    adminButtons.push({
+      type: ComponentType.Button,
+      customId: `${SESSION_PREFIX}${sessionToken}:admin-audit:${commandIndex}`,
+      label: i18n.t(($) => $['discord.commands.commands.admin.audit.title']),
+      style: ButtonStyle.Secondary,
+      emoji: '📋'
+    })
+
+    // Split admin buttons into rows of 3
+    for (let i = 0; i < adminButtons.length; i += 3) {
+      components.push({
+        type: ComponentType.ActionRow,
+        components: adminButtons.slice(i, i + 3)
+      })
+    }
+  }
 
   await interaction.update({
     embeds: [embed],

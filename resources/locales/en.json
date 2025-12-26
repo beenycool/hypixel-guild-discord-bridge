@@ -84,9 +84,9 @@
   ],
   "commands.insult": [
     "{{name}} would manage to trip over wireless connection",
-    "{{name}}, if brains were taxed, you’d get a refund",
+    "{{name}}, if brains were taxed, you'd get a refund",
     "{{name}} is like a puzzle with half its pieces",
-    "{{name}} plays like their controller’s unplugged",
+    "{{name}} plays like their controller's unplugged",
     "{{name}}, if laziness were an Olympic sport, you'd still find a way to come in second",
     "{{name}} looks like they get dressed in the dark... with mittens on",
     "{{name}} has a face for podcasts",
@@ -96,7 +96,7 @@
     "{{name}} tried to screenshot a piece of paper",
     "{{name}} looks like they got kicked out of the dollar store for being too broke",
     "{{name}} once googled how to open Google",
-    "{{name}} tried to scroll a screenshot and got mad when it didn’t move",
+    "{{name}} tried to scroll a screenshot and got mad when it didn't move",
     "{{name}} failed a personality quiz—twice",
     "{{name}} got a paper cut from a pdf",
     "{{name}} would lose a debate to a Magic 8 Ball",
@@ -106,7 +106,7 @@
     "{{name}} has mastered the art of saying something without contributing at all",
     "I admire how {{name}} just speaks their mind. Even when no one asked",
 
-    "{{name}}, You’re the reason God created the middle finger.",
+    "{{name}}, You're the reason God created the middle finger.",
 
     "{{name}} is like a pop-up ad: loud, pointless, and hard to get rid of",
     "{{name}}, You bring everyone so much joy… when you leave the room.",
@@ -120,17 +120,17 @@
     "{{name}}, You're like a WiFi signal—strong in the corner but gone when I actually need you.",
     "{{name}}, You have something on your chin… no, the third one down.",
 
-    "{{name}}, You're like a mystery meat sandwich—nobody knows what you're made of, and we’re too afraid to ask.",
+    "{{name}}, You're like a mystery meat sandwich—nobody knows what you're made of, and we're too afraid to ask.",
     "{{name}}, You're not totally useless—you can always serve as a bad example.",
     "{{name}}, You're like a software demo: limited, glitchy, and expires quickly.",
     "{{name}}, You're the human version of a participation trophy.",
-    "{{name}}, If I had a dollar for every smart thing you said, I’d be broke.",
+    "{{name}}, If I had a dollar for every smart thing you said, I'd be broke.",
     "{{name}}, You're like a Slinky. Not really good for anything, but you bring a smile when pushed down the stairs.",
-    "{{name}}, You're not annoying. You’re just... consistently disappointing.",
+    "{{name}}, You're not annoying. You're just... consistently disappointing.",
     "{{name}}, You're the kind of person who trips over a wireless signal.",
     "{{name}}, You're like a puzzle with half the pieces missing and none of the edge ones.",
     "{{name}}, You're the reason they put directions on Pop-Tarts.",
-    "{{name}}, You're like a Netflix show with 9 seasons—should’ve ended after 2.",
+    "{{name}}, You're like a Netflix show with 9 seasons—should've ended after 2.",
     "{{name}}, You bring so much confusion, you could be a math word problem.",
     "{{name}}, You're the kind of person who claps when the plane lands.",
     "{{name}}, Your brain is on airplane mode and forgot to reconnect.",
@@ -141,8 +141,109 @@
     "{{name}}, You're the human equivalent of a typo.",
 
     "{{name}}, You're like a Bluetooth speaker at a party—loud, annoying, and someone always tries to disconnect you.",
-    "{{name}}, You’d lose a battle of wits with a salad.",
+    "{{name}}, You'd lose a battle of wits with a salad.",
     "{{name}}, You're about as edgy as a marshmallow.",
-    "{{name}}, You have something special... it’s just well hidden. Like, really well."
-  ]
+    "{{name}}, You have something special... it's just well hidden. Like, really well."
+  ],
+
+  "discord.commands.commands": {
+    "title": "Command Reference",
+    "description": "Browse all available Discord and Minecraft commands. Use the tabs below to switch between command types.",
+    "stats": {
+      "discord": "Discord Commands",
+      "minecraft": "Minecraft Commands",
+      "commands": "commands available"
+    },
+    "tabs": {
+      "discord": "Discord Commands",
+      "minecraft": "Minecraft Commands"
+    },
+    "actions": {
+      "search": "Search",
+      "categories": "Categories",
+      "details": "Details",
+      "back-to-list": "Back to List",
+      "clear-search": "Clear Search",
+      "clear-category": "Clear Category"
+    },
+    "filters": {
+      "search": "Searching for",
+      "category": "Category"
+    },
+    "no-results": "No commands found",
+    "try-different-filters": "Try adjusting your search terms or clearing filters.",
+    "no-categories": "No categories available for the current command type.",
+    "command-not-found": "Command not found.",
+    "pagination": {
+      "info": "Page Navigation",
+      "display": "Showing {{current}} of {{total}} pages ({{count}} total commands)",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "search": {
+      "title": "Search Commands",
+      "label": "Search terms"
+    },
+    "categories": {
+      "title": "Command Categories",
+      "description": "Select a category to filter commands.",
+      "select": "Click to view {{category}} commands"
+    },
+    "details": {
+      "category": "Category",
+      "aliases": "Aliases",
+      "permission": "Permission",
+      "status": "Status",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "custom-name": "Custom Name"
+    },
+    "admin": {
+      "title": "Admin Command Management",
+      "description": "Manage command settings and permissions.",
+      "rename": {
+        "button": "Rename Command",
+        "modal": {
+          "title": "Rename Command",
+          "label": "New command name",
+          "placeholder": "Enter the new name for this command",
+          "success": "Command renamed successfully",
+          "error": {
+            "empty": "Command name cannot be empty",
+            "invalid": "Command name contains invalid characters",
+            "duplicate": "A command with this name already exists",
+            "protected": "This command cannot be renamed as it is a core admin command"
+          }
+        }
+      },
+      "toggle": {
+        "enable": "Enable Command",
+        "disable": "Disable Command",
+        "success": "Command {{action}}d successfully",
+        "error": {
+          "protected": "This command cannot be disabled as it is a core admin command"
+        }
+      },
+      "audit": {
+        "title": "Recent Changes",
+        "empty": "No recent changes",
+        "entry": {
+          "rename": "Renamed from '{{old}}' to '{{new}}'",
+          "enable": "Enabled command",
+          "disable": "Disabled command",
+          "restore": "Restored to default settings"
+        },
+        "timestamp": "{{time}} ago",
+        "by": "by {{user}}"
+      },
+      "confirm": {
+        "disable": {
+          "title": "Disable Command",
+          "message": "Are you sure you want to disable '{{command}}'? This will make the command unavailable to all users.",
+          "confirm": "Disable",
+          "cancel": "Cancel"
+        }
+      }
+    }
+  }
 }

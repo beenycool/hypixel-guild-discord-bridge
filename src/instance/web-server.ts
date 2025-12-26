@@ -9,6 +9,7 @@ import type Application from '../application.js'
 import type { ChatEvent } from '../common/application-event.js'
 import { InstanceType, MinecraftSendChatPriority } from '../common/application-event.js'
 import { Instance } from '../common/instance.js'
+import PackageJson from '../../package.json' with { type: 'json' }
 
 interface WebMessagePayload {
   type?: string
@@ -137,6 +138,20 @@ export default class WebServer extends Instance<InstanceType.Utility> {
       this.sendJson(response, HttpStatusCode.Ok, {
         success: true,
         uptime: Date.now() - this.startTime
+      })
+      return
+    }
+
+    if (route === '/health') {
+      if (request.method !== 'GET') {
+        this.sendMethodNotAllowed(response, ['GET'])
+        return
+      }
+
+      this.sendJson(response, HttpStatusCode.Ok, {
+        status: 'ok',
+        uptime: Date.now() - this.startTime,
+        version: PackageJson?.version ?? process.env.npm_package_version
       })
       return
     }
