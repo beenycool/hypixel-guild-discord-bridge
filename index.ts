@@ -28,7 +28,9 @@ if (!satisfies(ActualNodeVersion, RequiredNodeVersion)) {
 }
 
 const RootDirectory = import.meta.dirname
-const ConfigsDirectory = path.resolve(RootDirectory, 'config')
+const ConfigsDirectory = process.env.CONFIG_DIR
+  ? path.resolve(process.env.CONFIG_DIR)
+  : path.resolve(RootDirectory, 'config')
 fs.mkdirSync(ConfigsDirectory, { recursive: true })
 
 // Start a lightweight health/proxy server immediately to satisfy Azure startup probes.
