@@ -221,7 +221,7 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
         assert.ok(command.permission !== undefined)
         assert.ok(command.permission !== Permission.Anyone)
         await interaction.reply({
-          content: translateNoPermission(this.application, command.permission),
+          content: translateNoPermission(this.application, command.permission, bridgeId),
           flags: MessageFlags.Ephemeral,
           allowedMentions: { parse: [] }
         })
@@ -290,13 +290,13 @@ export class CommandManager extends SubInstance<DiscordInstance, InstanceType.Di
         showPermissionDenied: async (requiredPermission: Exclude<Permission, Permission.Anyone>) => {
           if (interaction.deferred || interaction.replied) {
             await interaction.editReply({
-              content: translateNoPermission(this.application, requiredPermission),
+              content: translateNoPermission(this.application, requiredPermission, bridgeId),
               allowedMentions: { parse: [] }
             })
             return
           } else {
             await interaction.reply({
-              content: translateNoPermission(this.application, requiredPermission),
+              content: translateNoPermission(this.application, requiredPermission, bridgeId),
               flags: MessageFlags.Ephemeral,
               allowedMentions: { parse: [] }
             })

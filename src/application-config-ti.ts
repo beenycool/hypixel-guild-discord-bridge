@@ -114,6 +114,7 @@ export const BridgeConfig = t.iface([], {
     "publicChannelIds": t.array("string"),
     "officerChannelIds": t.array("string"),
   }),
+  "language": t.opt("string"),
 });
 
 export const ApplicationConfig = t.iface([], {

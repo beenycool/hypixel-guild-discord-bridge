@@ -114,18 +114,19 @@ export class InstanceStatusManager {
       let result = ''
       for (let index = start; index < end; index++) {
         const element = entries[index]
+        const t = this.application.getTranslatorForBridge(element.bridgeId)
         result += `${index + 1}. <t:${Math.floor(element.createdAt / 1000)}:S> `
 
         switch (element.entryType) {
           case StatusHistoryEntryType.Message: {
-            result += escapeMarkdown(translateInstanceMessage(this.application.i18n, element.type)) + '\n'
+            result += escapeMarkdown(translateInstanceMessage(t, element.type)) + '\n'
             if (element.value !== undefined) {
               // eslint-disable-next-line unicorn/prefer-ternary
               if (
                 element.type === InstanceMessageType.MinecraftAuthenticationCode &&
                 index !== firstAuthenticationIndex
               ) {
-                result += escapeMarkdown(translateAuthenticationCodeExpired(this.application.i18n)) + '\n'
+                result += escapeMarkdown(translateAuthenticationCodeExpired(t)) + '\n'
               } else {
                 result += escapeMarkdown(element.value.trim()) + '\n'
               }
@@ -136,7 +137,7 @@ export class InstanceStatusManager {
           case StatusHistoryEntryType.Status: {
             result +=
               escapeMarkdown(
-                translateInstanceStatus(this.application.i18n, { from: element.fromStatus, to: element.toStatus })
+                translateInstanceStatus(t, { from: element.fromStatus, to: element.toStatus })
               ) + '\n'
             break
           }
@@ -266,6 +267,8 @@ export class InstanceStatusManager {
       }
     | undefined {
     const lastMessage = this.application.core.discordInstanceHistoryButton.lastButton(channelId, event.instanceName)
+    const bridgeIdForChannel = this.application.bridgeResolver.getBridgeIdForChannel(channelId)
+    const t = this.application.getTranslatorForBridge(bridgeIdForChannel)
 
     if (event.message === undefined && event.status.from === Status.Fresh) {
       if (lastMessage !== undefined) {
@@ -280,16 +283,20 @@ export class InstanceStatusManager {
     const currentStatus = this.getStatus(event)
     if (lastMessage === undefined) {
       if (event.status?.from === Status.Connected && currentStatus !== DiscordInstanceHistoryButtonType.Failed) {
+        const bridgeIdForChannel = this.application.bridgeResolver.getBridgeIdForChannel(channelId)
+        const t = this.application.getTranslatorForBridge(bridgeIdForChannel)
         return {
-          payload: this.generateInterrupted(event.instanceName),
+          payload: this.generateInterrupted(event.instanceName, t),
           onlySend: false,
           status: currentStatus,
           lastMessageId: undefined,
           replyMessageId: undefined
         }
       } else if (event.status?.from === Status.Fresh && currentStatus !== DiscordInstanceHistoryButtonType.Failed) {
+        const bridgeIdForChannel = this.application.bridgeResolver.getBridgeIdForChannel(channelId)
+        const t = this.application.getTranslatorForBridge(bridgeIdForChannel)
         return {
-          payload: this.generateInitiation(event.instanceName),
+          payload: this.generateInitiation(event.instanceName, t),
           onlySend: false,
           status: currentStatus,
           lastMessageId: undefined,
@@ -300,7 +307,7 @@ export class InstanceStatusManager {
       switch (currentStatus) {
         case DiscordInstanceHistoryButtonType.Failed: {
           return {
-            payload: this.generateFailed(event.instanceName),
+            payload: this.generateFailed(event.instanceName, t),
             onlySend: false,
             status: currentStatus,
             lastMessageId: undefined,
@@ -309,7 +316,7 @@ export class InstanceStatusManager {
         }
         case DiscordInstanceHistoryButtonType.Notice: {
           return {
-            payload: this.generateNotice(event.instanceName),
+            payload: this.generateNotice(event.instanceName, t),
             onlySend: false,
             status: currentStatus,
             lastMessageId: undefined,
@@ -317,8 +324,10 @@ export class InstanceStatusManager {
           }
         }
         case DiscordInstanceHistoryButtonType.Success: {
+          const bridgeIdForChannel = this.application.bridgeResolver.getBridgeIdForChannel(channelId)
+          const t = this.application.getTranslatorForBridge(bridgeIdForChannel)
           return {
-            payload: this.generateSuccess(event.instanceName),
+            payload: this.generateSuccess(event.instanceName, t),
             onlySend: false,
             status: currentStatus,
             lastMessageId: undefined,
@@ -334,8 +343,10 @@ export class InstanceStatusManager {
 
     // Don't combine success status
     if (currentStatus === DiscordInstanceHistoryButtonType.Success) {
+      const bridgeIdForChannel = this.application.bridgeResolver.getBridgeIdForChannel(channelId)
+      const t = this.application.getTranslatorForBridge(bridgeIdForChannel)
       return {
-        payload: this.generateSuccess(event.instanceName),
+        payload: this.generateSuccess(event.instanceName, t),
         onlySend: false,
         status: currentStatus,
         lastMessageId: undefined,
@@ -353,7 +364,7 @@ export class InstanceStatusManager {
         firstMessageEntry.type === InstanceMessageType.MinecraftAuthenticationCode
       ) {
         return {
-          payload: this.generateAuthentication(event.instanceName),
+          payload: this.generateAuthentication(event.instanceName, t),
           onlySend: false,
           status: DiscordInstanceHistoryButtonType.Notice,
           lastMessageId: lastMessage.messageId,
@@ -362,7 +373,7 @@ export class InstanceStatusManager {
       }
 
       return {
-        payload: this.generateAuthentication(event.instanceName),
+        payload: this.generateAuthentication(event.instanceName, t),
         onlySend: true,
         status: DiscordInstanceHistoryButtonType.Notice,
         lastMessageId: undefined,
@@ -374,7 +385,7 @@ export class InstanceStatusManager {
       switch (currentStatus) {
         case DiscordInstanceHistoryButtonType.Failed: {
           return {
-            payload: this.generateFailed(event.instanceName),
+            payload: this.generateFailed(event.instanceName, t),
             onlySend: true,
             status: currentStatus,
             lastMessageId: lastMessage.messageId,
@@ -383,7 +394,7 @@ export class InstanceStatusManager {
         }
         case DiscordInstanceHistoryButtonType.Notice: {
           return {
-            payload: this.generateNotice(event.instanceName),
+            payload: this.generateNotice(event.instanceName, t),
             onlySend: true,
             status: currentStatus,
             lastMessageId: lastMessage.messageId,
@@ -396,7 +407,7 @@ export class InstanceStatusManager {
       }
     } else if (event.status?.from === Status.Fresh && currentStatus !== DiscordInstanceHistoryButtonType.Failed) {
       return {
-        payload: this.generateInitiation(event.instanceName),
+        payload: this.generateInitiation(event.instanceName, t),
         onlySend: false,
         status: currentStatus,
         lastMessageId: lastMessage.messageId,
@@ -407,15 +418,17 @@ export class InstanceStatusManager {
       currentStatus === DiscordInstanceHistoryButtonType.Notice
     ) {
       return {
-        payload: this.generateNotice(event.instanceName),
+        payload: this.generateNotice(event.instanceName, t),
         onlySend: true,
         status: currentStatus,
         lastMessageId: lastMessage.messageId,
         replyMessageId: undefined
       }
     } else if (event.status?.from === Status.Connected && currentStatus === DiscordInstanceHistoryButtonType.Notice) {
+      const bridgeIdForChannel = this.application.bridgeResolver.getBridgeIdForChannel(channelId)
+      const t = this.application.getTranslatorForBridge(bridgeIdForChannel)
       return {
-        payload: this.generateInterrupted(event.instanceName),
+        payload: this.generateInterrupted(event.instanceName, t),
         onlySend: false,
         status: currentStatus,
         lastMessageId: undefined,
@@ -426,7 +439,7 @@ export class InstanceStatusManager {
       currentStatus === DiscordInstanceHistoryButtonType.Failed
     ) {
       return {
-        payload: this.generateFailed(event.instanceName),
+        payload: this.generateFailed(event.instanceName, t),
         onlySend: false,
         status: currentStatus,
         lastMessageId: lastMessage.messageId,
@@ -436,7 +449,7 @@ export class InstanceStatusManager {
       switch (currentStatus) {
         case DiscordInstanceHistoryButtonType.Failed: {
           return {
-            payload: this.generateFailed(event.instanceName),
+            payload: this.generateFailed(event.instanceName, t),
             onlySend: false,
             status: currentStatus,
             lastMessageId: undefined,
@@ -445,7 +458,7 @@ export class InstanceStatusManager {
         }
         case DiscordInstanceHistoryButtonType.Notice: {
           return {
-            payload: this.generateNotice(event.instanceName),
+            payload: this.generateNotice(event.instanceName, t),
             onlySend: false,
             status: currentStatus,
             lastMessageId: undefined,
@@ -459,11 +472,11 @@ export class InstanceStatusManager {
     }
   }
 
-  private generateNotice(instanceName: string): MessagePayload {
+  private generateNotice(instanceName: string, t: (k: any, o?: any) => string): MessagePayload {
     return {
       embeds: [
         {
-          description: this.application.i18n.t(($) => $['discord.status.chat-notice'], {
+          description: t((($: any) => $['discord.status.chat-notice']), {
             instanceName: beautifyInstanceName(instanceName)
           }),
           color: Color.Info
@@ -473,11 +486,11 @@ export class InstanceStatusManager {
     }
   }
 
-  private generateAuthentication(instanceName: string): MessagePayload {
+  private generateAuthentication(instanceName: string, t: (k: any, o?: any) => string): MessagePayload {
     return {
       embeds: [
         {
-          description: this.application.i18n.t(($) => $['discord.status.requires-authentication'], {
+          description: t((($: any) => $['discord.status.requires-authentication']), {
             instanceName: beautifyInstanceName(instanceName)
           }),
           color: Color.Info
@@ -486,11 +499,11 @@ export class InstanceStatusManager {
       components: [{ type: ComponentType.ActionRow, components: this.generateButtons() }]
     }
   }
-  private generateInitiation(instanceName: string): MessagePayload {
+  private generateInitiation(instanceName: string, t: (k: any, o?: any) => string): MessagePayload {
     return {
       embeds: [
         {
-          description: this.application.i18n.t(($) => $['discord.status.instance-started'], {
+          description: t((($: any) => $['discord.status.instance-started']), {
             instanceName: beautifyInstanceName(instanceName)
           }),
           color: Color.Info
@@ -500,11 +513,11 @@ export class InstanceStatusManager {
     }
   }
 
-  private generateFailed(instanceName: string): MessagePayload {
+  private generateFailed(instanceName: string, t: (k: any, o?: any) => string): MessagePayload {
     return {
       embeds: [
         {
-          description: this.application.i18n.t(($) => $['discord.status.chat-failed'], {
+          description: t((($: any) => $['discord.status.chat-failed']), {
             instanceName: beautifyInstanceName(instanceName)
           }),
           color: Color.Bad
@@ -514,11 +527,11 @@ export class InstanceStatusManager {
     }
   }
 
-  private generateSuccess(instanceName: string): MessagePayload {
+  private generateSuccess(instanceName: string, t: (k: any, o?: any) => string): MessagePayload {
     return {
       embeds: [
         {
-          description: this.application.i18n.t(($) => $['discord.status.chat-resumed'], {
+          description: t((($: any) => $['discord.status.chat-resumed']), {
             instanceName: beautifyInstanceName(instanceName)
           }),
           color: Color.Good
@@ -527,11 +540,11 @@ export class InstanceStatusManager {
     }
   }
 
-  private generateInterrupted(instanceName: string): MessagePayload {
+  private generateInterrupted(instanceName: string, t: (k: any, o?: any) => string): MessagePayload {
     return {
       embeds: [
         {
-          description: this.application.i18n.t(($) => $['discord.status.chat-interrupted'], {
+          description: t((($: any) => $['discord.status.chat-interrupted']), {
             instanceName: beautifyInstanceName(instanceName)
           }),
           color: Color.Info

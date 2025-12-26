@@ -16,7 +16,7 @@ import { Color, InstanceType, Permission } from '../../../common/application-eve
 import type { DiscordCommandContext, DiscordCommandHandler } from '../../../common/commands.js'
 import type UnexpectedErrorHandler from '../../../common/unexpected-error-handler.js'
 import { translateInstanceMessage, translateInstanceStatus } from '../../../core/instance/instance-language'
-import { ApplicationLanguages } from '../../../core/language-configurations'
+import { ApplicationLanguages, LanguageConfigurations } from '../../../core/language-configurations'
 import type { ProxyConfig } from '../../../core/minecraft/sessions-manager'
 import { ProxyProtocol } from '../../../core/minecraft/sessions-manager'
 import { SpontaneousEventsNames } from '../../../core/spontanmous-events-configurations'
@@ -292,6 +292,22 @@ function createBridgeOption(
             toggleOption: () => {
               bridgeConfig.setTextToImage(bridgeId, !bridgeConfig.getTextToImage(bridgeId))
             }
+          },
+          {
+            type: OptionType.PresetList,
+            name: 'Language',
+            description: 'Preferred language for this bridge. Leave empty to use the global application language.',
+            getOption: () => {
+              const v = bridgeConfig.getLanguage(bridgeId)
+              return v ? [v] : []
+            },
+            setOption: (values) => {
+              const lang = values.length > 0 ? values[0] : undefined
+              bridgeConfig.setLanguage(bridgeId, lang)
+            },
+            min: 0,
+            max: 1,
+            options: Object.values(ApplicationLanguages).map((value) => ({ label: value, value: value }))
           }
         ]
       },
@@ -1973,11 +1989,12 @@ async function minecraftInstanceAdd(
       if (event.instanceName !== instanceName || event.instanceType !== InstanceType.Minecraft) return
 
       assert.ok(embed.description)
+      const t = application.getTranslatorForBridge(event.bridgeId)
       if (event.status !== undefined) {
-        embed.description += `- ${translateInstanceStatus(application.i18n, event.status)}\n`
+        embed.description += `- ${translateInstanceStatus(t, event.status)}\n`
       }
       if (event.message !== undefined) {
-        embed.description += `- ${translateInstanceMessage(application.i18n, event.message.type)}`
+        embed.description += `- ${translateInstanceMessage(t, event.message.type)}`
         embed.description += event.message.value === undefined ? '\n' : `: ${event.message.value}\n`
       }
 

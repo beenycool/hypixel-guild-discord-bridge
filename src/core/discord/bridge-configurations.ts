@@ -85,6 +85,8 @@ export class BridgeConfigurations {
     this.configuration.delete(`${bridgeId}_darkAuctionReminderMessage`)
     this.configuration.delete(`${bridgeId}_starfallReminderMessage`)
     this.configuration.delete(`${bridgeId}_announceMutedPlayerMessage`)
+    // Per-bridge language
+    this.configuration.delete(`${bridgeId}_language`)
   }
 
   // ========== Channel Configurations ==========
@@ -143,6 +145,28 @@ export class BridgeConfigurations {
    */
   public setMinecraftInstances(bridgeId: string, instanceNames: string[]): void {
     this.configuration.setStringArray(`${bridgeId}_minecraftInstances`, instanceNames)
+  }
+
+  // ========== Language Configuration ==========
+
+  /**
+   * Get the configured language for a specific bridge (e.g., 'en', 'de', 'ar').
+   * Returns undefined when no per-bridge language is set.
+   */
+  public getLanguage(bridgeId: string): string | undefined {
+    const value = this.configuration.getString(`${bridgeId}_language`, '')
+    return value === '' ? undefined : value
+  }
+
+  /**
+   * Set the configured language for a specific bridge. Pass undefined to clear the setting.
+   */
+  public setLanguage(bridgeId: string, language: string | undefined): void {
+    if (language === undefined || language === '') {
+      this.configuration.delete(`${bridgeId}_language`)
+    } else {
+      this.configuration.setString(`${bridgeId}_language`, language)
+    }
   }
 
   // ========== Role Configurations ==========

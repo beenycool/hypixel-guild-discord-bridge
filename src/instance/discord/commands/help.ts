@@ -9,8 +9,11 @@ import type {
 } from 'discord.js'
 import { ApplicationCommandOptionType, MessageFlags, SlashCommandBuilder } from 'discord.js'
 
-import { Permission } from '../../../common/application-event.js'
+import { Permission, Color } from '../../../common/application-event.js'
 import type { DiscordCommandHandler } from '../../../common/commands.js'
+import { pageMessage } from '../utility/discord-pager.js'
+import { DefaultCommandFooter } from '../common/discord-config.js'
+import { splitToEmbeds } from '../utility/embed-utils.js'
 
 export default {
   getCommandBuilder: () => new SlashCommandBuilder().setName('help').setDescription('Show available commands.'),
@@ -26,43 +29,53 @@ export default {
     const guildCommands = await context.interaction.guild.commands.fetch()
 
     const userPermission = context.permission
-    const embed = { title: 'Commands Help', description: '' } satisfies APIEmbed
+    const embedBase = {
+      title: 'Commands Help',
+      description: '',
+      color: Color.Default,
+      footer: { text: DefaultCommandFooter }
+    } satisfies APIEmbed
 
     const allCommands = context.allCommands
 
-    embed.description += '**Anyone**\n'
-    embed.description += createField(
+    embedBase.description += '**Anyone**\n'
+    embedBase.description += createField(
       guildCommands,
       allCommands.filter((command) => command.permission === undefined || command.permission === Permission.Anyone)
     )
-    embed.description += '\n'
+    embedBase.description += '\n'
 
     if (userPermission >= Permission.Helper) {
-      embed.description += '**Helper**\n'
-      embed.description += createField(
+      embedBase.description += '**Helper**\n'
+      embedBase.description += createField(
         guildCommands,
         allCommands.filter((command) => command.permission === Permission.Helper)
       )
-      embed.description += '\n'
+      embedBase.description += '\n'
     }
     if (userPermission >= Permission.Officer) {
-      embed.description += '**Officer**\n'
-      embed.description += createField(
+      embedBase.description += '**Officer**\n'
+      embedBase.description += createField(
         guildCommands,
         allCommands.filter((command) => command.permission === Permission.Officer)
       )
-      embed.description += '\n'
+      embedBase.description += '\n'
     }
     if (userPermission >= Permission.Admin) {
-      embed.description += '**Admin**\n'
-      embed.description += createField(
+      embedBase.description += '**Admin**\n'
+      embedBase.description += createField(
         guildCommands,
         allCommands.filter((command) => command.permission === Permission.Admin)
       )
-      embed.description += '\n'
+      embedBase.description += '\n'
     }
 
-    await context.interaction.editReply({ embeds: [embed] })
+    const pages = splitToEmbeds(embedBase, embedBase.description)
+    if (pages.length <= 1) {
+      await context.interaction.editReply({ embeds: [pages[0] ?? embedBase] })
+    } else {
+      await pageMessage(context.interaction, pages, context.errorHandler)
+    }
   }
 } satisfies DiscordCommandHandler
 

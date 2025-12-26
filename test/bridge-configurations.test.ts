@@ -56,6 +56,19 @@ try {
   bridgeCfg.deleteSkyblockNotifiers(bridgeId)
   assert.strictEqual(bridgeCfg.getSkyblockEventNotifiers(bridgeId), undefined)
 
+  // Language getter/setter
+  assert.strictEqual(bridgeCfg.getLanguage(bridgeId), undefined)
+  bridgeCfg.setLanguage(bridgeId, 'de')
+  assert.strictEqual(bridgeCfg.getLanguage(bridgeId), 'de')
+  bridgeCfg.setLanguage(bridgeId, undefined)
+  assert.strictEqual(bridgeCfg.getLanguage(bridgeId), undefined)
+
+  // Removal cleans up language key
+  bridgeCfg.setLanguage(bridgeId, 'ar')
+  bridgeCfg.addBridgeId(bridgeId)
+  bridgeCfg.removeBridgeId(bridgeId)
+  assert.strictEqual(bridgeCfg.getLanguage(bridgeId), undefined)
+
   console.log('PASS: BridgeConfigurations DB getters/setters')
 } finally {
   try {

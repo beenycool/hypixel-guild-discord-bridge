@@ -109,6 +109,11 @@ export interface BridgeConfig {
    */
   id: string
   /**
+   * Optional language for this bridge (e.g., 'en', 'de', 'ar').
+   * If set, this overrides the global application language for messages sent by this bridge.
+   */
+  language?: string
+  /**
    * List of Minecraft instance names that belong to this bridge.
    * Messages from these instances will only be sent to this bridge's Discord channels.
    */
@@ -126,7 +131,7 @@ export interface BridgeConfig {
      */
     officerChannelIds: string[]
   }
-}
+} 
 
 export interface ApplicationConfig {
   version: 2 // typeof ApplicationConfigVersion

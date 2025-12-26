@@ -4,52 +4,54 @@ import type { StatusChange } from '../../common/application-event'
 import { InstanceMessageType } from '../../common/application-event'
 import { Status } from '../../common/connectable-instance'
 
-export function translateInstanceMessage(i18n: i18n, key: InstanceMessageType): string {
+export type Translator = (key: Parameters<i18n['t']>[0], opts?: any) => string
+
+export function translateInstanceMessage(t: Translator, key: InstanceMessageType): string {
   switch (key) {
     case InstanceMessageType.MinecraftAuthenticationCode: {
-      return i18n.t(($) => $['instance.message.authentication-code'])
+      return t(($) => $['instance.message.authentication-code'])
     }
     case InstanceMessageType.MinecraftInstanceNotAutoConnect: {
-      return i18n.t(($) => $['instance.message.no-autoconnect'])
+      return t(($) => $['instance.message.no-autoconnect'])
     }
     case InstanceMessageType.MinecraftKicked: {
-      return i18n.t(($) => $['instance.message.minecraft-kicked'])
+      return t(($) => $['instance.message.minecraft-kicked'])
     }
     case InstanceMessageType.MinecraftBanned: {
-      return i18n.t(($) => $['instance.message.minecraft-banned'])
+      return t(($) => $['instance.message.minecraft-banned'])
     }
     case InstanceMessageType.MinecraftInternetProblems: {
-      return i18n.t(($) => $['instance.message.internet-problems'])
+      return t(($) => $['instance.message.internet-problems'])
     }
     case InstanceMessageType.MinecraftFailedTooManyTimes: {
-      return i18n.t(($) => $['instance.message.failed-too-many-times'])
+      return t(($) => $['instance.message.failed-too-many-times'])
     }
     case InstanceMessageType.MinecraftEnded: {
-      return i18n.t(($) => $['instance.message.minecraft-ended'])
+      return t(($) => $['instance.message.minecraft-ended'])
     }
     case InstanceMessageType.MinecraftIncompatible: {
-      return i18n.t(($) => $['instance.message.version-incompatible'])
+      return t(($) => $['instance.message.version-incompatible'])
     }
     case InstanceMessageType.MinecraftKickedLoggedFromAnotherLocation: {
-      return i18n.t(($) => $['instance.message.logged-from-another-location'])
+      return t(($) => $['instance.message.logged-from-another-location'])
     }
     case InstanceMessageType.MinecraftXboxDown: {
-      return i18n.t(($) => $['instance.message.xbox-down'])
+      return t(($) => $['instance.message.xbox-down'])
     }
     case InstanceMessageType.MinecraftXboxThrottled: {
-      return i18n.t(($) => $['instance.message.xbox-throttled'])
+      return t(($) => $['instance.message.xbox-throttled'])
     }
     case InstanceMessageType.MinecraftNoAccount: {
-      return i18n.t(($) => $['instance.message.no-account'])
+      return t(($) => $['instance.message.no-account'])
     }
     case InstanceMessageType.MinecraftProxyBroken: {
-      return i18n.t(($) => $['instance.message.proxy-problem'])
+      return t(($) => $['instance.message.proxy-problem'])
     }
     case InstanceMessageType.MinecraftRestarting: {
-      return i18n.t(($) => $['instance.message.no-autoconnect'])
+      return t(($) => $['instance.message.no-autoconnect'])
     }
     case InstanceMessageType.MinecraftGuildKicked: {
-      return i18n.t(($) => $['instance.message.guild-kicked'])
+      return t(($) => $['instance.message.guild-kicked'])
     }
     default: {
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
@@ -58,36 +60,36 @@ export function translateInstanceMessage(i18n: i18n, key: InstanceMessageType): 
   }
 }
 
-export function translateAuthenticationCodeExpired(i18n: i18n): string {
-  return i18n.t(($) => $['instance.message.authentication-code-expired'])
+export function translateAuthenticationCodeExpired(t: Translator): string {
+  return t(($) => $['instance.message.authentication-code-expired'])
 }
 
-export function translateInstanceStatus(i18n: i18n, status: StatusChange): string {
-  return i18n.t(($) => $['instance.status.change'], {
-    from: translateStatus(i18n, status.from),
-    to: translateStatus(i18n, status.to)
+export function translateInstanceStatus(t: Translator, status: StatusChange): string {
+  return t(($) => $['instance.status.change'], {
+    from: translateStatus(t, status.from),
+    to: translateStatus(t, status.to)
   })
 }
 
-function translateStatus(i18n: i18n, status: Status): string {
+function translateStatus(t: Translator, status: Status): string {
   switch (status) {
     case Status.Fresh: {
-      return i18n.t(($) => $['instance.status.fresh'])
+      return t(($) => $['instance.status.fresh'])
     }
     case Status.Connecting: {
-      return i18n.t(($) => $['instance.status.connecting'])
+      return t(($) => $['instance.status.connecting'])
     }
     case Status.Connected: {
-      return i18n.t(($) => $['instance.status.connected'])
+      return t(($) => $['instance.status.connected'])
     }
     case Status.Disconnected: {
-      return i18n.t(($) => $['instance.status.disconnected'])
+      return t(($) => $['instance.status.disconnected'])
     }
     case Status.Ended: {
-      return i18n.t(($) => $['instance.status.ended'])
+      return t(($) => $['instance.status.ended'])
     }
     case Status.Failed: {
-      return i18n.t(($) => $['instance.status.failed'])
+      return t(($) => $['instance.status.failed'])
     }
     default: {
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions

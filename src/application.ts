@@ -247,6 +247,29 @@ export default class Application extends Emittery<ApplicationEvents> implements 
       .catch(this.errorHandler.promiseCatch(`changing language to ${languageName}`))
   }
 
+  /**
+   * Get a translator function that respects per-bridge language settings.
+   * Resolution precedence: dynamic DB > static bridge config > global application language.
+   * Returns a function compatible with `i18n.t` that will call `this.i18n.t` with the resolved `lng` option.
+   */
+  public getTranslatorForBridge(bridgeId?: string): (key: Parameters<i18n['t']>[0], opts?: any) => string {
+    let dynamicLang: string | undefined
+    if (bridgeId !== undefined) {
+      dynamicLang = this.core.bridgeConfigurations.getLanguage(bridgeId)
+    }
+
+    let staticLang: string | undefined
+    if (bridgeId !== undefined && this.config.bridges !== undefined) {
+      const bridgeCfg = this.config.bridges.find((b) => b.id === bridgeId)
+      staticLang = bridgeCfg?.language
+    }
+
+    const chosenLang = dynamicLang ?? staticLang
+
+    return (key: Parameters<i18n['t']>[0], opts?: any) =>
+      (this.i18n.t(key as any, { ...(opts ?? {}), ...(chosenLang ? { lng: chosenLang } : {}) }) as unknown) as string
+  }
+
   public async start(): Promise<void> {
     await this.core.awaitReady()
     await this.pluginsManager.loadPlugins(this.rootDirectory)
