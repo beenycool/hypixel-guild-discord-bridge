@@ -1,0 +1,6 @@
+version: '3'
+services:
+  bridge:
+    image: ghcr.io/beenycool/hypixel-guild-discord-bridge:latest
+    entrypoint: ["node", "--import", "tsx/esm", "index.ts"]
+    restart: always
