@@ -5,6 +5,6 @@ services:
     entrypoint: ["node", "--import", "tsx/esm", "index.ts"]
     restart: always
     environment:
-      - CONFIG_DIR=/home/config
+      - CONFIG_DIR=/app/config
     volumes:
-      - ${WEBAPP_STORAGE_HOME}/site/wwwroot/config:/home/config
+      - ${WEBAPP_STORAGE_HOME}/site/wwwroot/config:/app/config

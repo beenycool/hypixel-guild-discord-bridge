@@ -5,4 +5,4 @@ services:
     entrypoint: ["node", "--import", "tsx/esm", "index.ts"]
     restart: always
     environment:
-      - CONFIG_DIR=/home/config
+      - CONFIG_DIR=/app/config
