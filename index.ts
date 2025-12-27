@@ -35,12 +35,19 @@ const ConfigsDirectory = process.env.CONFIG_DIR
 console.log(`Starting application...`)
 console.log(`Root Directory: ${RootDirectory}`)
 console.log(`Config Directory: ${ConfigsDirectory}`)
+console.log(`Environment:`)
+console.log(`WEBSITES_PORT: ${process.env.WEBSITES_PORT}`)
+console.log(`PORT: ${process.env.PORT}`)
+console.log(`INTERNAL_PORT: ${process.env.INTERNAL_PORT}`)
 
 try {
-  fs.mkdirSync(ConfigsDirectory, { recursive: true })
+  if (!fs.existsSync(ConfigsDirectory)) {
+    console.log(`Creating config directory: ${ConfigsDirectory}`)
+    fs.mkdirSync(ConfigsDirectory, { recursive: true })
+  }
 } catch (error) {
   console.error(`Failed to create config directory: ${ConfigsDirectory}`, error)
-  process.exit(1)
+  // Don't exit, let it try to continue or fail later with better logs
 }
 
 // Start a lightweight health/proxy server immediately to satisfy Azure startup probes.
