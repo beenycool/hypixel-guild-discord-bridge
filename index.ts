@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import http from 'node:http'
 import path from 'node:path'
 import process from 'node:process'
 
@@ -32,6 +33,12 @@ const ConfigsDirectory = process.env.CONFIG_DIR
   ? path.resolve(process.env.CONFIG_DIR)
   : path.resolve(RootDirectory, 'config')
 
+// Azure App Service compatibility: default to port 80 if no port is provided.
+// We also export INTERNAL_PORT so the application config can use ${INTERNAL_PORT}.
+const externalPort = Number(process.env.WEBSITES_PORT ?? process.env.PORT ?? 80)
+const internalPort = Number(process.env.INTERNAL_PORT ?? 9091)
+process.env.INTERNAL_PORT = String(internalPort)
+
 console.log(`Starting application...`)
 console.log(`Root Directory: ${RootDirectory}`)
 console.log(`Config Directory: ${ConfigsDirectory}`)
@@ -54,10 +61,6 @@ try {
 // It listens on the external port (WEBSITES_PORT) and responds 200 on `/uptime` quickly.
 // All other requests are proxied to the internal application port (INTERNAL_PORT) so
 // the real web server can boot on the internal port without exposing the slow startup window.
-import http from 'node:http'
-
-const externalPort = Number(process.env.WEBSITES_PORT ?? process.env.PORT ?? 9091)
-const internalPort = Number(process.env.INTERNAL_PORT ?? String(externalPort + 1))
 const processStartTime = Date.now()
 
 const healthServer = http.createServer((req, res) => {
