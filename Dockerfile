@@ -49,6 +49,6 @@ RUN mkdir -p logs config/backup plugins && \
     chown -R node:node /app
 
 # Use non-root user for security
-USER node
+# USER node
 
 ENTRYPOINT ["npm", "start"]

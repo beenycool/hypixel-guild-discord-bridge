@@ -31,7 +31,17 @@ const RootDirectory = import.meta.dirname
 const ConfigsDirectory = process.env.CONFIG_DIR
   ? path.resolve(process.env.CONFIG_DIR)
   : path.resolve(RootDirectory, 'config')
-fs.mkdirSync(ConfigsDirectory, { recursive: true })
+
+console.log(`Starting application...`)
+console.log(`Root Directory: ${RootDirectory}`)
+console.log(`Config Directory: ${ConfigsDirectory}`)
+
+try {
+  fs.mkdirSync(ConfigsDirectory, { recursive: true })
+} catch (error) {
+  console.error(`Failed to create config directory: ${ConfigsDirectory}`, error)
+  process.exit(1)
+}
 
 // Start a lightweight health/proxy server immediately to satisfy Azure startup probes.
 // It listens on the external port (WEBSITES_PORT) and responds 200 on `/uptime` quickly.
