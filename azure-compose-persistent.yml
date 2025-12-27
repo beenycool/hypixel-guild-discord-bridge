@@ -6,3 +6,5 @@ services:
     restart: always
     environment:
       - CONFIG_DIR=/home/config
+    volumes:
+      - ${WEBAPP_STORAGE_HOME}/site/wwwroot/config:/home/config
