@@ -1,11 +1,19 @@
 import type { BaseEvent, InstanceType } from './application-event.js'
 
 export default class EventHelper<K extends InstanceType> {
+  private readonly bridgeIdProvider: () => string | undefined
+
   constructor(
     private readonly instanceName: string,
     private readonly instanceType: K,
-    private readonly bridgeId?: string
-  ) {}
+    bridgeId?: string | (() => string | undefined)
+  ) {
+    if (typeof bridgeId === 'function') {
+      this.bridgeIdProvider = bridgeId
+    } else {
+      this.bridgeIdProvider = () => bridgeId
+    }
+  }
   private lastId = 0
 
   public generate(): string {
@@ -21,8 +29,9 @@ export default class EventHelper<K extends InstanceType> {
       instanceName: this.instanceName
     }
 
-    if (this.bridgeId !== undefined) {
-      event.bridgeId = this.bridgeId
+    const bridgeId = this.bridgeIdProvider()
+    if (bridgeId !== undefined) {
+      event.bridgeId = bridgeId
     }
 
     return event
