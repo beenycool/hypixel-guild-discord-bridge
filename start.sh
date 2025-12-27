@@ -1,5 +1,8 @@
 #! /bin/sh
 
+# Unset problematic npm config that causes warnings/failures on some platforms
+unset npm_config_before
+
 while true; do
   # Delete any temporarily changes such as from package-lock.json
   # This will not delete logs or configurations

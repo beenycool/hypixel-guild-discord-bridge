@@ -26,6 +26,8 @@ FROM node:22-bookworm-slim
 
 LABEL authors="aidn5, HyxonQz"
 ENV NODE_ENV=production
+# Fix npm warning about invalid 'before' config often injected by hosting platforms
+ENV npm_config_before=null
 WORKDIR /app
 
 # Install runtime libraries for canvas
