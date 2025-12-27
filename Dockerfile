@@ -51,4 +51,4 @@ RUN mkdir -p logs config/backup plugins && \
 # Use non-root user for security
 # USER node
 
-ENTRYPOINT ["npm", "start"]
+ENTRYPOINT ["node", "--import", "tsx/esm", "index.ts"]
