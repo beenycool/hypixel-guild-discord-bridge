@@ -87,6 +87,9 @@ export class BridgeConfigurations {
     this.configuration.delete(`${bridgeId}_announceMutedPlayerMessage`)
     // Per-bridge language
     this.configuration.delete(`${bridgeId}_language`)
+    // Passthrough commands settings
+    this.configuration.delete(`${bridgeId}_passthroughCommands`)
+    this.configuration.delete(`${bridgeId}_passthroughPrefix`)
   }
 
   // ========== Channel Configurations ==========
@@ -686,5 +689,42 @@ export class BridgeConfigurations {
 
   public setAnnounceMutedPlayerMessage(bridgeId: string, message: string): void {
     this.configuration.setString(`${bridgeId}_announceMutedPlayerMessage`, message)
+  }
+
+  // ========== Passthrough Commands Configurations ==========
+
+  /**
+   * Get passthrough commands for a specific bridge.
+   * These commands are forwarded directly to in-game chat without the bridge prefix.
+   * Returns empty array if not configured (falls back to global).
+   */
+  public getPassthroughCommands(bridgeId: string): string[] {
+    return this.configuration.getStringArray(`${bridgeId}_passthroughCommands`, [])
+  }
+
+  /**
+   * Set passthrough commands for a specific bridge
+   */
+  public setPassthroughCommands(bridgeId: string, commands: string[]): void {
+    this.configuration.setStringArray(`${bridgeId}_passthroughCommands`, commands)
+  }
+
+  /**
+   * Get passthrough prefix for a specific bridge (undefined = use global)
+   */
+  public getPassthroughPrefix(bridgeId: string): string | undefined {
+    const value = this.configuration.getString(`${bridgeId}_passthroughPrefix`, '')
+    return value === '' ? undefined : value
+  }
+
+  /**
+   * Set passthrough prefix for a specific bridge
+   */
+  public setPassthroughPrefix(bridgeId: string, prefix: string | undefined): void {
+    if (prefix === undefined || prefix === '') {
+      this.configuration.delete(`${bridgeId}_passthroughPrefix`)
+    } else {
+      this.configuration.setString(`${bridgeId}_passthroughPrefix`, prefix)
+    }
   }
 }

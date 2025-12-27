@@ -5,8 +5,7 @@ import { escapeMarkdown } from 'discord.js'
 import type { Logger } from 'log4js'
 
 import type Application from '../../application.js'
-import type { InstanceType } from '../../common/application-event.js'
-import { ChannelType, PunishmentType } from '../../common/application-event.js'
+import { ChannelType, InstanceType, MinecraftSendChatPriority, PunishmentType } from '../../common/application-event.js'
 import type EventHelper from '../../common/event-helper.js'
 import SubInstance from '../../common/sub-instance'
 import type UnexpectedErrorHandler from '../../common/unexpected-error-handler.js'
@@ -101,6 +100,11 @@ export default class ChatManager extends SubInstance<DiscordInstance, InstanceTy
 
     const content = this.cleanMessage(event)
     if (content.length === 0) return
+
+    // Check if this is a passthrough command that should be sent directly to in-game chat
+    if (await this.handlePassthroughCommand(event, content, channelType, bridgeId)) {
+      return // Message was handled as a passthrough command
+    }
 
     const fillBaseEvent = this.eventHelper.fillBaseEvent()
     this.messageAssociation.addMessageId(fillBaseEvent.eventId, {
@@ -215,5 +219,74 @@ export default class ChatManager extends SubInstance<DiscordInstance, InstanceTy
     }
 
     return content
+  }
+
+  /**
+   * Handle passthrough commands - commands that are forwarded directly to in-game chat
+   * without the bridge formatting (e.g., !bw, !sw for in-game stat bots).
+   * Returns true if the message was handled as a passthrough command.
+   */
+  private async handlePassthroughCommand(
+    event: Message,
+    content: string,
+    channelType: ChannelType,
+    bridgeId: string | undefined
+  ): Promise<boolean> {
+    // Only handle public channel messages for passthrough
+    if (channelType !== ChannelType.Public) return false
+
+    const bridgeConfig = this.application.core.bridgeConfigurations
+    const globalCommandsConfig = this.application.core.commandsConfigurations
+
+    // Get passthrough prefix (bridge-specific or global)
+    const passthroughPrefix =
+      bridgeId !== undefined
+        ? (bridgeConfig.getPassthroughPrefix(bridgeId) ?? globalCommandsConfig.getPassthroughPrefix())
+        : globalCommandsConfig.getPassthroughPrefix()
+
+    // Check if message starts with passthrough prefix
+    if (!content.startsWith(passthroughPrefix)) return false
+
+    // Get passthrough commands list (bridge-specific takes priority over global)
+    const passthroughCommands =
+      bridgeId !== undefined && bridgeConfig.getPassthroughCommands(bridgeId).length > 0
+        ? bridgeConfig.getPassthroughCommands(bridgeId)
+        : globalCommandsConfig.getPassthroughCommands()
+
+    // If no passthrough commands configured, don't handle
+    if (passthroughCommands.length === 0) return false
+
+    // Extract the command name (first word after prefix)
+    const messageWithoutPrefix = content.slice(passthroughPrefix.length)
+    const commandName = messageWithoutPrefix.split(/\s+/)[0]?.toLowerCase()
+    if (!commandName) return false
+
+    // Check if command is in passthrough list
+    const isPassthroughCommand = passthroughCommands.some(
+      (cmd) => cmd.toLowerCase() === commandName
+    )
+    if (!isPassthroughCommand) return false
+
+    // Get instances to send to (based on bridge if applicable)
+    const instances = this.application
+      .getInstancesNames(InstanceType.Minecraft)
+      .filter((name) => this.application.bridgeResolver.shouldProcessEvent(bridgeId, name))
+
+    if (instances.length === 0) {
+      this.logger.warn('No Minecraft instances available for passthrough command')
+      return false
+    }
+
+    // Send the command directly to in-game guild chat without bridge formatting
+    const gcCommand = `/gc ${content}`
+    await this.application.sendMinecraft(
+      instances,
+      MinecraftSendChatPriority.Default,
+      undefined,
+      gcCommand
+    )
+
+    this.logger.debug(`Passthrough command sent to guild chat: ${content}`)
+    return true
   }
 }

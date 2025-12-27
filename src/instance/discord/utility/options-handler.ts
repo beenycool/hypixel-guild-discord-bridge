@@ -155,14 +155,11 @@ interface OptionId {
 
 export class OptionsHandler {
   public static readonly BackButton = 'back-button'
-  public static readonly SearchButton = 'search-button'
-  public static readonly ClearSearchButton = 'clear-search-button'
   private static readonly InactivityTime = 600_000
   private originalReply: InteractionResponse | undefined
   private enabled = true
   private path: string[] = []
   private ids = new Map<string, OptionId>()
-  private searchQuery: string | undefined
   private pages = new Map<string, number>()
 
   constructor(private readonly mainCategory: CategoryOption | EmbedCategoryOption) {
@@ -225,7 +222,6 @@ export class OptionsHandler {
           this.ids,
           this.path,
           this.enabled,
-          this.searchQuery,
           this.pages.get(this.getPathKey()) ?? 0,
           DEFAULT_PAGE_SIZE
         ).create()
@@ -263,7 +259,6 @@ export class OptionsHandler {
                     this.ids,
                     this.path,
                     this.enabled,
-                    this.searchQuery,
                     this.pages.get(this.getPathKey()) ?? 0,
                     DEFAULT_PAGE_SIZE
                   ).create()
@@ -309,7 +304,6 @@ export class OptionsHandler {
               this.ids,
               this.path,
               this.enabled,
-              this.searchQuery,
               this.pages.get(this.getPathKey()) ?? 0,
               DEFAULT_PAGE_SIZE
             ).create()
@@ -335,7 +329,6 @@ export class OptionsHandler {
             this.ids,
             this.path,
             this.enabled,
-            this.searchQuery,
             this.pages.get(this.getPathKey()) ?? 0,
             DEFAULT_PAGE_SIZE
           ).create()
@@ -378,53 +371,7 @@ export class OptionsHandler {
       return false
     }
 
-    // Search handling
-    if (interaction.customId === OptionsHandler.SearchButton) {
-      assert.ok(interaction.isButton())
 
-      await interaction.showModal({
-        customId: 'settings-search',
-        title: 'Search Settings',
-        components: [
-          {
-            type: ComponentType.ActionRow,
-            components: [
-              {
-                type: ComponentType.TextInput,
-                customId: 'settings-search-input',
-                style: TextInputStyle.Short,
-                label: 'Filter options by text',
-                required: false,
-                value: this.searchQuery ?? undefined
-              }
-            ]
-          }
-        ]
-      })
-
-      interaction
-        .awaitModalSubmit({
-          time: 300_000,
-          filter: (modalInteraction) => modalInteraction.user.id === interaction.user.id
-        })
-        .then(async (modalInteraction) => {
-          assert.ok(modalInteraction.isFromMessage())
-
-          const value = modalInteraction.fields.getTextInputValue('settings-search-input').trim()
-          this.searchQuery = value.length === 0 ? undefined : value
-          await this.updateView(modalInteraction)
-        })
-        .catch(errorHandler.promiseCatch('handling search modal submit'))
-
-      return true
-    }
-
-    if (interaction.customId === OptionsHandler.ClearSearchButton) {
-      this.searchQuery = undefined
-      // reset page for current path
-      this.pages.set(this.getPathKey(), 0)
-      return false
-    }
 
     if (interaction.customId === OptionsHandler.BackButton) {
       this.path.pop()
@@ -734,7 +681,6 @@ class ViewBuilder {
     private readonly ids: Map<string, OptionId>,
     private readonly path: string[],
     private readonly enabled: boolean,
-    private readonly searchQuery: string | undefined,
     private readonly page: number,
     private readonly pageSize: number,
     private titleCreated = false
@@ -744,69 +690,7 @@ class ViewBuilder {
     if (this.hasCreated) throw new Error('This instance has already been used to create a view.')
     this.hasCreated = true
 
-    // If a search query is set, build a search results category and render it
-    if (this.searchQuery !== undefined && this.searchQuery.length > 0) {
-      const lowerQuery = this.searchQuery.toLowerCase()
 
-      const flattened = this.flattenWithPath(this.mainCategory)
-
-      const matchedOptions = flattened
-        .filter(({ item, path }) => {
-          let haystack = `${path.join(' > ')} ${item.name} ${item.description ?? ''}`
-
-          try {
-            switch (item.type) {
-              case OptionType.Label: {
-                if (item.getOption !== undefined) haystack += ` ${item.getOption()}`
-                break
-              }
-              case OptionType.Boolean: {
-                haystack += ` ${item.getOption()}`
-                break
-              }
-              case OptionType.Text: {
-                haystack += ` ${item.getOption()}`
-                break
-              }
-              case OptionType.Number: {
-                haystack += ` ${item.getOption()}`
-                break
-              }
-              case OptionType.List:
-              case OptionType.PresetList: {
-                haystack += ` ${(item.getOption() as unknown as string[]).join(' ')}`
-                break
-              }
-              case OptionType.Channel:
-              case OptionType.Role:
-              case OptionType.User: {
-                haystack += ` ${(item.getOption() as unknown as string[]).join(' ')}`
-                break
-              }
-              default:
-              // No-op
-            }
-          } catch {
-            // ignore errors while trying to introspect options
-          }
-
-          return haystack.toLowerCase().includes(lowerQuery)
-        })
-        .map(({ item, path }) => {
-          // shallow copy with prefixed name to include parent path context
-          const prefixedName = path.length > 0 ? `${path.join(' > ')} > ${item.name}` : item.name
-          return { ...item, name: prefixedName } as OptionItem
-        })
-
-      const searchCategory: CategoryOption = {
-        type: OptionType.Category,
-        name: `Search results for "${escapeMarkdown(this.searchQuery)}"`,
-        options: matchedOptions
-      }
-
-      this.createCategoryView(searchCategory)
-      return { type: ComponentType.Container, components: this.components } satisfies ContainerComponentData
-    }
 
     this.createCategoryView(this.getOption())
     return { type: ComponentType.Container, components: this.components } satisfies ContainerComponentData
@@ -850,7 +734,7 @@ class ViewBuilder {
           block.push({ type: ComponentType.TextDisplay, content: label })
 
           // Recurse into embed category and push its blocks inline
-          const nestedBuilder = new ViewBuilder(option, this.ids, [], this.enabled, undefined, 0, this.pageSize, true)
+          const nestedBuilder = new ViewBuilder(option, this.ids, [], this.enabled, 0, this.pageSize, true)
           const nested = nestedBuilder.create()
           block.push(...(nested.components as ComponentInContainerData[]))
 
@@ -1185,7 +1069,7 @@ class ViewBuilder {
     if (this.skipped || this.countTotalComponents(this.components) > MAX_COMPONENTS) {
       const noteComponent: ComponentInContainerData = {
         type: ComponentType.TextDisplay,
-        content: '**Note:** Too many items to display. Narrow your selection or use search.'
+        content: '**Note:** Too many items to display. Narrow your selection.'
       }
       const noteCount = this.getComponentCount(noteComponent)
 
@@ -1219,30 +1103,7 @@ class ViewBuilder {
         })
       }
 
-      // Add search controls (available everywhere)
-      this.append({
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            label: this.searchQuery ? `Search (edit)` : 'Search',
-            customId: OptionsHandler.SearchButton,
-            style: ButtonStyle.Primary,
-            disabled: !this.enabled
-          },
-          {
-            type: ComponentType.Button,
-            label: 'Clear Search',
-            customId: OptionsHandler.ClearSearchButton,
-            style: ButtonStyle.Secondary,
-            disabled: !this.enabled || this.searchQuery === undefined
-          }
-        ]
-      })
 
-      if (this.searchQuery !== undefined && this.searchQuery.length > 0) {
-        this.append({ type: ComponentType.TextDisplay, content: `**Search:** ${escapeMarkdown(this.searchQuery)}` })
-      }
 
       if ('header' in currentCategory && currentCategory.header !== undefined) {
         this.append({ type: ComponentType.TextDisplay, content: currentCategory.header })

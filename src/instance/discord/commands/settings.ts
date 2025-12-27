@@ -768,6 +768,40 @@ function createBridgeOption(
               const disabledCommands = bridgeConfig.getDisabledCommands(bridgeId)
               return disabledCommands.length === 0 ? 'none (using global)' : disabledCommands.join(', ')
             }
+          },
+          {
+            type: OptionType.Text,
+            name: 'Passthrough Prefix',
+            description: 'Prefix for passthrough commands. Leave empty to use global prefix.',
+            style: InputStyle.Tiny,
+            min: 0,
+            max: 2,
+            getOption: () =>
+              bridgeConfig.getPassthroughPrefix(bridgeId) ?? application.core.commandsConfigurations.getPassthroughPrefix(),
+            setOption: (newValue) => {
+              if (newValue === '' || newValue === application.core.commandsConfigurations.getPassthroughPrefix()) {
+                bridgeConfig.setPassthroughPrefix(bridgeId, undefined)
+              } else {
+                bridgeConfig.setPassthroughPrefix(bridgeId, newValue)
+              }
+            }
+          },
+          {
+            type: OptionType.List,
+            name: 'Passthrough Commands',
+            description:
+              'Commands sent directly to in-game chat for stat bots (e.g., bw, sw). ' +
+              'Leave empty to use global settings. Enter without prefix.',
+            style: InputStyle.Short,
+            min: 0,
+            max: 20,
+            getOption: () => {
+              const commands = bridgeConfig.getPassthroughCommands(bridgeId)
+              return commands.length > 0 ? commands : application.core.commandsConfigurations.getPassthroughCommands()
+            },
+            setOption: (values: string[]) => {
+              bridgeConfig.setPassthroughCommands(bridgeId, values)
+            }
           }
         ]
       },
@@ -1455,6 +1489,33 @@ function fetchCommandsOptions(application: Application): CategoryOption {
         getOption: () => {
           const disabledCommands = commands.getDisabledCommands()
           return disabledCommands.length === 0 ? 'none' : disabledCommands.join(', ')
+        }
+      },
+      {
+        type: OptionType.Text,
+        name: 'Passthrough Prefix',
+        description: 'Prefix for passthrough commands (commands sent directly to in-game chat for stat bots).',
+        style: InputStyle.Tiny,
+        min: 1,
+        max: 2,
+        getOption: () => commands.getPassthroughPrefix(),
+        setOption: (newValue) => {
+          commands.setPassthroughPrefix(newValue)
+        }
+      },
+      {
+        type: OptionType.List,
+        name: 'Passthrough Commands',
+        description:
+          'Commands that are sent directly to in-game guild chat without bridge formatting. ' +
+          'Useful for triggering in-game stat bots (e.g., `bw`, `sw`, `cata`). ' +
+          'Enter command names without prefix (one per line).',
+        style: InputStyle.Short,
+        min: 1,
+        max: 20,
+        getOption: () => commands.getPassthroughCommands(),
+        setOption: (values: string[]) => {
+          commands.setPassthroughCommands(values)
         }
       }
     ]

@@ -16,7 +16,7 @@ for (let index = 0; index < many; index++) {
 const bigCategory = { type: OptionType.Category, name: 'Big Category', options } as unknown as CategoryOption
 
 const ids = new Map()
-const view = new ViewBuilder(bigCategory, ids, [], true, undefined, 0, DEFAULT_PAGE_SIZE).create()
+const view = new ViewBuilder(bigCategory, ids, [], true, 0, DEFAULT_PAGE_SIZE).create()
 
 if (view.components.length > MAX_COMPONENTS)
   throw new Error(`components exceed MAX_COMPONENTS (${view.components.length} > ${MAX_COMPONENTS})`)

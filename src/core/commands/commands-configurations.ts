@@ -64,4 +64,34 @@ export class CommandsConfigurations {
   public setTypoCooldownSeconds(seconds: number): void {
     this.configuration.setNumber('typoCooldownSeconds', seconds)
   }
+
+  /**
+   * Get the list of passthrough command prefixes.
+   * These commands are forwarded directly to in-game chat without the bridge prefix.
+   * Useful for triggering in-game stat bots like !bw, !sw, etc.
+   */
+  public getPassthroughCommands(): string[] {
+    return this.configuration.getStringArray('passthroughCommands', [])
+  }
+
+  /**
+   * Set the list of passthrough command prefixes.
+   */
+  public setPassthroughCommands(commands: string[]): void {
+    this.configuration.setStringArray('passthroughCommands', commands)
+  }
+
+  /**
+   * Get the prefix used for passthrough commands (default: '!')
+   */
+  public getPassthroughPrefix(): string {
+    return this.configuration.getString('passthroughPrefix', '!')
+  }
+
+  /**
+   * Set the prefix used for passthrough commands
+   */
+  public setPassthroughPrefix(prefix: string): void {
+    this.configuration.setString('passthroughPrefix', prefix)
+  }
 }
