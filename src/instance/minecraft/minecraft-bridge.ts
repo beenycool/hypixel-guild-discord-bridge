@@ -221,10 +221,17 @@ export default class MinecraftBridge extends Bridge<MinecraftInstance> {
     this.messageAssociation.addMessageId(event.eventId, reply)
 
     const response = `${feedback ? '{f} ' : ''}${event.commandResponse}`
-    const sanitizedResponse = await this.application.minecraftManager.sanitizer.sanitizeChatMessage(
+    let sanitizedResponse = await this.application.minecraftManager.sanitizer.sanitizeChatMessage(
       this.clientInstance.instanceName,
       response
     )
+    
+    // Add random suffix to guild chat messages to prevent Hypixel spam filter from blocking repeated messages
+    if (reply.channel === ChannelType.Public || reply.channel === ChannelType.Officer) {
+      const randomSuffix = (Math.random() + 1).toString(36).substring(7)
+      sanitizedResponse = `${sanitizedResponse} ${randomSuffix}`
+    }
+    
     let prefix = ''
     switch (reply.channel) {
       case ChannelType.Public: {
