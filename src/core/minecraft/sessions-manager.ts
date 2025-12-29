@@ -222,10 +222,26 @@ export class SessionsManager {
       }
 
       // Import each cache entry
+      // Only import top-level keys that are objects (cache entries)
+      // Skip any nested properties that might have been incorrectly extracted
       for (const [cacheName, cacheValue] of Object.entries(parsedData)) {
         try {
-          if (typeof cacheValue !== 'object' || cacheValue === null) {
-            errors.push(`Skipping invalid cache entry "${cacheName}": value must be an object`)
+          // Skip if value is not an object (strings, numbers, etc. are not valid cache entries)
+          if (typeof cacheValue !== 'object' || cacheValue === null || Array.isArray(cacheValue)) {
+            // Only report as error if it looks like it might have been a cache entry
+            // (i.e., has a reasonable name, not something like "IssueInstant" which is clearly nested)
+            if (cacheName.length > 2 && !cacheName.match(/^(IssueInstant|NotAfter|Token|DisplayClaims)$/i)) {
+              errors.push(`Skipping invalid cache entry "${cacheName}": value must be an object`)
+            }
+            continue
+          }
+
+          // Additional validation: check if this looks like a nested property that was incorrectly extracted
+          // Common nested property names that shouldn't be top-level cache entries
+          const nestedPropertyNames = ['IssueInstant', 'NotAfter', 'Token', 'DisplayClaims', 'xui', 'xdi', 'xti', 'uhs', 'did', 'dcs', 'tid']
+          if (nestedPropertyNames.includes(cacheName)) {
+            // This is likely a nested property, skip it
+            this.logger.debug(`Skipping nested property "${cacheName}" that was incorrectly extracted as a cache entry`)
             continue
           }
 
@@ -340,47 +356,8 @@ export class SessionsManager {
 
       // Find the start of a JSON object
       if (trimmed[position] !== '{') {
-        // Check if we're seeing a comma followed by a quote (suggests a single object with multiple keys)
-        const nextCommaQuote = trimmed.indexOf(',"', position)
-        const nextBrace = trimmed.indexOf('{', position)
-        
-        // If we find a comma+quote before the next brace, this might be a single malformed object
-        if (nextCommaQuote !== -1 && (nextBrace === -1 || nextCommaQuote < nextBrace)) {
-          // This looks like a single object with multiple keys, try to fix it
-          const beforeComma = trimmed.substring(0, nextCommaQuote)
-          // Try to close the current object and parse what we have so far
-          const testJson = beforeComma + '}'
-          try {
-            const testParsed = JSON.parse(testJson) as Record<string, unknown>
-            Object.assign(merged, testParsed)
-            objectCount++
-            errors.push('Parsed partial object (JSON may be truncated or malformed)')
-            // Try to continue with the rest
-            position = nextCommaQuote + 1
-            // Skip the comma and try to parse the next key-value pair
-            const restOfString = trimmed.substring(nextCommaQuote + 1)
-            // Try to parse remaining as a new object
-            if (restOfString.trim().startsWith('"')) {
-              // Looks like we have more keys, try to wrap them in braces
-              const wrappedRest = '{' + restOfString
-              const fixedRest = this.tryFixJson(wrappedRest)
-              try {
-                const restParsed = JSON.parse(fixedRest) as Record<string, unknown>
-                Object.assign(merged, restParsed)
-                objectCount++
-                break // Successfully parsed the rest
-              } catch {
-                // Couldn't parse the rest, break
-                break
-              }
-            }
-            break
-          } catch {
-            // Failed to parse partial object, continue with normal flow
-          }
-        }
-        
         // Try to find the next '{' instead of giving up
+        const nextBrace = trimmed.indexOf('{', position)
         if (nextBrace === -1) {
           // No more JSON objects found
           if (objectCount === 0) {
