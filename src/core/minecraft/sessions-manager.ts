@@ -189,11 +189,27 @@ export class SessionsManager {
         try {
           parsedData = JSON.parse(jsonData) as Record<string, unknown>
         } catch (parseError) {
-          // If that fails, try to handle multiple concatenated JSON objects
-          parsedData = this.parseConcatenatedJsonObjects(jsonData, errors)
-          if (Object.keys(parsedData).length === 0) {
-            // If we couldn't parse anything, return early
-            return { imported, errors }
+          // If that fails, try to fix common issues and parse again
+          let fixedParsed: Record<string, unknown> | undefined
+          const fixedJson = this.tryFixJson(jsonData)
+          if (fixedJson !== jsonData) {
+            try {
+              fixedParsed = JSON.parse(fixedJson) as Record<string, unknown>
+              errors.push('Fixed JSON formatting issues (added missing closing braces)')
+            } catch {
+              // Fixed version also failed, continue to concatenated parser
+            }
+          }
+          
+          // If single object parsing still failed, try concatenated JSON objects
+          if (fixedParsed) {
+            parsedData = fixedParsed
+          } else {
+            parsedData = this.parseConcatenatedJsonObjects(jsonData, errors)
+            if (Object.keys(parsedData).length === 0) {
+              // If we couldn't parse anything, return early
+              return { imported, errors }
+            }
           }
         }
       } else {
@@ -238,6 +254,63 @@ export class SessionsManager {
   }
 
   /**
+   * Try to fix common JSON issues like missing closing braces.
+   * This is a best-effort attempt to recover from truncated or malformed JSON.
+   *
+   * @param jsonString The potentially malformed JSON string
+   * @returns Fixed JSON string (or original if no fixes applied)
+   */
+  private tryFixJson(jsonString: string): string {
+    const trimmed = jsonString.trim()
+    if (!trimmed.startsWith('{')) {
+      return jsonString
+    }
+
+    // Count opening and closing braces to see if we're missing closing braces
+    let depth = 0
+    let inString = false
+    let escapeNext = false
+
+    for (let i = 0; i < trimmed.length; i++) {
+      const char = trimmed[i]
+
+      if (escapeNext) {
+        escapeNext = false
+        continue
+      }
+
+      if (char === '\\') {
+        escapeNext = true
+        continue
+      }
+
+      if (char === '"') {
+        inString = !inString
+        continue
+      }
+
+      if (!inString) {
+        if (char === '{') {
+          depth++
+        } else if (char === '}') {
+          depth--
+        }
+      }
+    }
+
+    // If we have unclosed braces, try to close them
+    if (depth > 0 && depth <= 10) {
+      // Remove any trailing commas before adding closing braces
+      let fixed = trimmed.replace(/,\s*$/, '')
+      // Add missing closing braces
+      fixed += '}'.repeat(depth)
+      return fixed
+    }
+
+    return jsonString
+  }
+
+  /**
    * Parse multiple concatenated JSON objects from a string.
    * Handles cases where multiple JSON objects are concatenated without separators (e.g., {"a":1}{"b":2}).
    * Also handles objects separated by whitespace or newlines.
@@ -267,8 +340,47 @@ export class SessionsManager {
 
       // Find the start of a JSON object
       if (trimmed[position] !== '{') {
-        // Try to find the next '{' instead of giving up
+        // Check if we're seeing a comma followed by a quote (suggests a single object with multiple keys)
+        const nextCommaQuote = trimmed.indexOf(',"', position)
         const nextBrace = trimmed.indexOf('{', position)
+        
+        // If we find a comma+quote before the next brace, this might be a single malformed object
+        if (nextCommaQuote !== -1 && (nextBrace === -1 || nextCommaQuote < nextBrace)) {
+          // This looks like a single object with multiple keys, try to fix it
+          const beforeComma = trimmed.substring(0, nextCommaQuote)
+          // Try to close the current object and parse what we have so far
+          const testJson = beforeComma + '}'
+          try {
+            const testParsed = JSON.parse(testJson) as Record<string, unknown>
+            Object.assign(merged, testParsed)
+            objectCount++
+            errors.push('Parsed partial object (JSON may be truncated or malformed)')
+            // Try to continue with the rest
+            position = nextCommaQuote + 1
+            // Skip the comma and try to parse the next key-value pair
+            const restOfString = trimmed.substring(nextCommaQuote + 1)
+            // Try to parse remaining as a new object
+            if (restOfString.trim().startsWith('"')) {
+              // Looks like we have more keys, try to wrap them in braces
+              const wrappedRest = '{' + restOfString
+              const fixedRest = this.tryFixJson(wrappedRest)
+              try {
+                const restParsed = JSON.parse(fixedRest) as Record<string, unknown>
+                Object.assign(merged, restParsed)
+                objectCount++
+                break // Successfully parsed the rest
+              } catch {
+                // Couldn't parse the rest, break
+                break
+              }
+            }
+            break
+          } catch {
+            // Failed to parse partial object, continue with normal flow
+          }
+        }
+        
+        // Try to find the next '{' instead of giving up
         if (nextBrace === -1) {
           // No more JSON objects found
           if (objectCount === 0) {
@@ -278,7 +390,8 @@ export class SessionsManager {
         }
         // Skip unexpected characters and try again
         const skipped = trimmed.substring(position, nextBrace).trim()
-        if (skipped.length > 0) {
+        if (skipped.length > 0 && !skipped.match(/^[,:]\s*$/)) {
+          // Only report non-trivial skipped content (not just commas/colons)
           errors.push(`Skipped unexpected content between JSON objects: "${skipped.substring(0, 50)}${skipped.length > 50 ? '...' : ''}"`)
         }
         position = nextBrace
