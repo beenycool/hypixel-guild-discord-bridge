@@ -1860,6 +1860,18 @@ function fetchMinecraftOptions(application: Application, context: DiscordCommand
 
             onInteraction: (interaction, errorHandler) =>
               minecraftInstanceRemove(application, interaction, errorHandler, context.bridgeId)
+          },
+          {
+            type: OptionType.Action,
+
+            name: 'Import Microsoft Auth Cache',
+            description:
+              'Import Microsoft authentication cache from JSON. Paste the JSON content from your auth-cache files.',
+            label: 'import',
+            style: ButtonStyle.Secondary,
+
+            onInteraction: (interaction, errorHandler) =>
+              minecraftInstanceImportAuthCache(application, interaction, errorHandler, context.bridgeId)
           }
         ]
       }
@@ -2285,6 +2297,151 @@ function parseSocks5(url: string): ProxyConfig {
   }
 
   return { id: 0, host: host, port: port, user: username, password: password, protocol: type } satisfies ProxyConfig
+}
+
+async function minecraftInstanceImportAuthCache(
+  application: Application,
+  interaction: ButtonInteraction,
+  errorHandler: UnexpectedErrorHandler,
+  bridgeId?: string
+): Promise<boolean> {
+  await interaction.showModal({
+    customId: 'minecraft-instance-import-auth',
+    title: 'Import Microsoft Auth Cache',
+    components: [
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.TextInput,
+            customId: 'instance-name',
+            style: TextInputStyle.Short,
+            label: 'Instance Name',
+            placeholder: 'e.g. myinstance',
+            minLength: 1,
+            maxLength: 128,
+            required: true
+          }
+        ]
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.TextInput,
+            customId: 'json-content',
+            style: TextInputStyle.Paragraph,
+            label: 'JSON Content',
+            placeholder:
+              'Paste JSON content here. Should be an object with cache entries like {"token": {...}, "mca": {...}}',
+            minLength: 1,
+            maxLength: 4000,
+            required: true
+          }
+        ]
+      }
+    ]
+  })
+
+  const modalInteraction = await interaction.awaitModalSubmit({
+    time: 300_000,
+    filter: (modalInteraction) => modalInteraction.user.id === interaction.user.id
+  })
+
+  const instanceName = modalInteraction.fields.getTextInputValue('instance-name').trim()
+  const jsonContent = modalInteraction.fields.getTextInputValue('json-content').trim()
+
+  const EmbedTitle = 'Importing Microsoft Auth Cache'
+
+  try {
+    application.applicationIntegrity.ensureInstanceName({
+      instanceName: instanceName,
+      instanceType: InstanceType.Minecraft
+    })
+  } catch (error: unknown) {
+    errorHandler.error('validating instance name for auth cache import', error)
+    await modalInteraction.reply({
+      embeds: [
+        {
+          title: EmbedTitle,
+          description:
+            'Instance name must be a single word with no spaces or special characters besides alphanumerical letters: A-Z and a-z and 0-9 and "_"',
+          color: Color.Error,
+          footer: { text: DefaultCommandFooter }
+        } satisfies APIEmbed
+      ],
+      flags: MessageFlags.Ephemeral
+    })
+    return true
+  }
+
+  // Check if instance exists
+  const instance = application.core.minecraftSessions.getInstance(instanceName)
+  if (!instance) {
+    await modalInteraction.reply({
+      embeds: [
+        {
+          title: EmbedTitle,
+          description: `Instance "${escapeMarkdown(instanceName)}" does not exist. Please create it first using "Instance Add".`,
+          color: Color.Error,
+          footer: { text: DefaultCommandFooter }
+        } satisfies APIEmbed
+      ],
+      flags: MessageFlags.Ephemeral
+    })
+    return true
+  }
+
+  if (bridgeId) {
+    const bridgeInstances = application.core.bridgeConfigurations.getMinecraftInstances(bridgeId)
+    if (!bridgeInstances.includes(instanceName)) {
+      await modalInteraction.reply({
+        embeds: [
+          {
+            title: EmbedTitle,
+            description: `Instance "${escapeMarkdown(instanceName)}" is not associated with this bridge.`,
+            color: Color.Error,
+            footer: { text: DefaultCommandFooter }
+          } satisfies APIEmbed
+        ],
+        flags: MessageFlags.Ephemeral
+      })
+      return true
+    }
+  }
+
+  // Import the cache
+  const result = application.core.minecraftSessions.importAuthCache(instanceName, instanceName, jsonContent)
+
+  const embed: APIEmbed = {
+    title: EmbedTitle,
+    description: '',
+    color: result.errors.length > 0 ? (result.imported.length > 0 ? Color.Info : Color.Error) : Color.Good,
+    footer: { text: DefaultCommandFooter }
+  }
+
+  if (result.imported.length > 0) {
+    embed.description += `**Successfully imported ${result.imported.length} cache entries:**\n`
+    embed.description += result.imported.map((name) => `- \`${escapeMarkdown(name)}\``).join('\n')
+    embed.description += '\n\n'
+  }
+
+  if (result.errors.length > 0) {
+    embed.description += `**Errors (${result.errors.length}):**\n`
+    embed.description += result.errors.map((error) => `- ${escapeMarkdown(error)}`).join('\n')
+  }
+
+  if (result.imported.length === 0 && result.errors.length === 0) {
+    embed.description = 'No cache entries found in the JSON data.'
+    embed.color = Color.Info
+  }
+
+  await modalInteraction.reply({
+    embeds: [embed],
+    flags: MessageFlags.Ephemeral
+  })
+
+  return true
 }
 
 function errorMessage(error: unknown): string {

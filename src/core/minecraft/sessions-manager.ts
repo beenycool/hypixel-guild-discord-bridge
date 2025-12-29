@@ -161,6 +161,66 @@ export class SessionsManager {
 
     return transaction()
   }
+
+  /**
+   * Import Microsoft authentication cache from JSON data.
+   * The JSON should be an object where keys are cache names (e.g., "token", "mca", "userToken", etc.)
+   * and values are the cache data objects.
+   *
+   * @param instanceName The Minecraft instance name
+   * @param username The username for the session (typically the instance name)
+   * @param jsonData JSON string or object containing cache data
+   * @returns Object with imported cache names and any errors
+   */
+  public importAuthCache(
+    instanceName: string,
+    username: string,
+    jsonData: string | Record<string, unknown>
+  ): { imported: string[]; errors: string[] } {
+    const imported: string[] = []
+    const errors: string[] = []
+
+    try {
+      // Parse JSON if it's a string
+      const parsedData =
+        typeof jsonData === 'string' ? (JSON.parse(jsonData) as Record<string, unknown>) : jsonData
+
+      if (typeof parsedData !== 'object' || parsedData === null || Array.isArray(parsedData)) {
+        errors.push('Invalid JSON format: expected an object with cache entries')
+        return { imported, errors }
+      }
+
+      // Import each cache entry
+      for (const [cacheName, cacheValue] of Object.entries(parsedData)) {
+        try {
+          if (typeof cacheValue !== 'object' || cacheValue === null) {
+            errors.push(`Skipping invalid cache entry "${cacheName}": value must be an object`)
+            continue
+          }
+
+          this.setSession(instanceName, username, cacheName, cacheValue as Record<string, unknown>)
+          imported.push(cacheName)
+          this.logger.debug(`Imported cache "${cacheName}" for instance "${instanceName}"`)
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          errors.push(`Failed to import cache "${cacheName}": ${errorMessage}`)
+          this.logger.warn(`Failed to import cache "${cacheName}" for instance "${instanceName}":`, error)
+        }
+      }
+
+      if (imported.length > 0) {
+        this.logger.info(
+          `Imported ${imported.length} cache entries for instance "${instanceName}": ${imported.join(', ')}`
+        )
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      errors.push(`Failed to parse JSON: ${errorMessage}`)
+      this.logger.error(`Failed to import auth cache for instance "${instanceName}":`, error)
+    }
+
+    return { imported, errors }
+  }
 }
 
 interface MojangInstance {
