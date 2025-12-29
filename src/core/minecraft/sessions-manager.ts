@@ -240,6 +240,7 @@ export class SessionsManager {
   /**
    * Parse multiple concatenated JSON objects from a string.
    * Handles cases where multiple JSON objects are concatenated without separators (e.g., {"a":1}{"b":2}).
+   * Also handles objects separated by whitespace or newlines.
    *
    * @param jsonString The string containing concatenated JSON objects
    * @param errors Array to append any parsing errors to
@@ -252,9 +253,10 @@ export class SessionsManager {
     const merged: Record<string, unknown> = {}
     let position = 0
     const trimmed = jsonString.trim()
+    let objectCount = 0
 
     while (position < trimmed.length) {
-      // Skip whitespace
+      // Skip whitespace (including newlines, tabs, etc.)
       while (position < trimmed.length && /\s/.test(trimmed[position])) {
         position++
       }
@@ -265,8 +267,21 @@ export class SessionsManager {
 
       // Find the start of a JSON object
       if (trimmed[position] !== '{') {
-        errors.push(`Unexpected character at position ${position}: expected '{'`)
-        break
+        // Try to find the next '{' instead of giving up
+        const nextBrace = trimmed.indexOf('{', position)
+        if (nextBrace === -1) {
+          // No more JSON objects found
+          if (objectCount === 0) {
+            errors.push(`Unexpected character at position ${position}: expected '{'`)
+          }
+          break
+        }
+        // Skip unexpected characters and try again
+        const skipped = trimmed.substring(position, nextBrace).trim()
+        if (skipped.length > 0) {
+          errors.push(`Skipped unexpected content between JSON objects: "${skipped.substring(0, 50)}${skipped.length > 50 ? '...' : ''}"`)
+        }
+        position = nextBrace
       }
 
       // Find the matching closing brace by tracking brace depth
@@ -274,6 +289,7 @@ export class SessionsManager {
       let startPos = position
       let inString = false
       let escapeNext = false
+      let foundEnd = false
 
       for (let i = position; i < trimmed.length; i++) {
         const char = trimmed[i]
@@ -305,21 +321,39 @@ export class SessionsManager {
                 const parsed = JSON.parse(jsonObjectStr) as Record<string, unknown>
                 // Merge into the result object
                 Object.assign(merged, parsed)
+                objectCount++
               } catch (parseError) {
                 const errorMessage = parseError instanceof Error ? parseError.message : String(parseError)
                 errors.push(`Failed to parse JSON object at position ${startPos}: ${errorMessage}`)
               }
               position = i + 1
+              foundEnd = true
               break
             }
           }
         }
       }
 
-      // If we didn't find a matching closing brace, break
-      if (depth !== 0) {
-        errors.push(`Unclosed JSON object starting at position ${startPos}`)
-        break
+      // If we didn't find a matching closing brace, try to continue with next object
+      if (!foundEnd) {
+        if (depth !== 0) {
+          // Try to extract a partial object for better error reporting
+          const partial = trimmed.substring(startPos, Math.min(startPos + 100, trimmed.length))
+          errors.push(
+            `Unclosed JSON object starting at position ${startPos} (depth: ${depth}). Partial content: "${partial}${partial.length < 100 ? '' : '...'}"`
+          )
+          
+          // Try to find the next '{' to continue parsing other objects
+          const nextBrace = trimmed.indexOf('{', position)
+          if (nextBrace === -1 || nextBrace === position) {
+            // No more objects to parse
+            break
+          }
+          position = nextBrace
+        } else {
+          // Should not happen, but break to avoid infinite loop
+          break
+        }
       }
     }
 
