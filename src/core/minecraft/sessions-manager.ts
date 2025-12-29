@@ -197,7 +197,24 @@ export class SessionsManager {
               fixedParsed = JSON.parse(fixedJson) as Record<string, unknown>
               errors.push('Fixed JSON formatting issues (added missing closing braces)')
             } catch {
-              // Fixed version also failed, continue to concatenated parser
+              // Fixed version also failed, continue to alternative parsers
+            }
+          }
+          
+          // If single object parsing still failed, try more aggressive fixing
+          if (!fixedParsed) {
+            const trimmed = jsonData.trim()
+            if (trimmed.startsWith('{')) {
+              // Try aggressive fixing for single object
+              const moreFixedJson = this.tryFixJsonAggressive(trimmed)
+              if (moreFixedJson !== trimmed) {
+                try {
+                  fixedParsed = JSON.parse(moreFixedJson) as Record<string, unknown>
+                  errors.push('Fixed JSON formatting issues (added missing closing braces)')
+                } catch {
+                  // Still failed, will try concatenated parser below
+                }
+              }
             }
           }
           
@@ -267,6 +284,141 @@ export class SessionsManager {
     }
 
     return { imported, errors }
+  }
+
+  /**
+   * Check if a string looks like a single JSON object (not concatenated objects).
+   * A single object typically has multiple top-level keys separated by commas.
+   *
+   * @param jsonString The JSON string to check
+   * @returns True if it looks like a single object
+   */
+  private looksLikeSingleObject(jsonString: string): boolean {
+    // Count top-level commas (not inside nested objects/arrays/strings)
+    let depth = 0
+    let inString = false
+    let escapeNext = false
+    let topLevelCommas = 0
+    let hasMultipleKeys = false
+
+    for (let i = 0; i < jsonString.length; i++) {
+      const char = jsonString[i]
+
+      if (escapeNext) {
+        escapeNext = false
+        continue
+      }
+
+      if (char === '\\') {
+        escapeNext = true
+        continue
+      }
+
+      if (char === '"') {
+        inString = !inString
+        continue
+      }
+
+      if (!inString) {
+        if (char === '{' || char === '[') {
+          depth++
+        } else if (char === '}' || char === ']') {
+          depth--
+        } else if (char === ',' && depth === 1) {
+          // Top-level comma (depth 1 because we're inside the outer object)
+          topLevelCommas++
+          hasMultipleKeys = true
+        }
+      }
+    }
+
+    // If we have multiple top-level keys (commas at depth 1), it's likely a single object
+    return hasMultipleKeys && topLevelCommas > 0
+  }
+
+  /**
+   * More aggressive JSON fixing for single objects that are missing closing braces.
+   * This handles cases where the entire object structure is malformed.
+   *
+   * @param jsonString The potentially malformed JSON string
+   * @returns Fixed JSON string (or original if no fixes applied)
+   */
+  private tryFixJsonAggressive(jsonString: string): string {
+    const trimmed = jsonString.trim()
+    if (!trimmed.startsWith('{')) {
+      return jsonString
+    }
+
+    // Count opening and closing braces to see if we're missing closing braces
+    let depth = 0
+    let inString = false
+    let escapeNext = false
+    let lastNonWhitespacePos = -1
+
+    for (let i = 0; i < trimmed.length; i++) {
+      const char = trimmed[i]
+
+      if (escapeNext) {
+        escapeNext = false
+        if (!/\s/.test(char)) {
+          lastNonWhitespacePos = i
+        }
+        continue
+      }
+
+      if (char === '\\') {
+        escapeNext = true
+        continue
+      }
+
+      if (char === '"') {
+        inString = !inString
+        lastNonWhitespacePos = i
+        continue
+      }
+
+      if (!inString) {
+        if (char === '{') {
+          depth++
+          lastNonWhitespacePos = i
+        } else if (char === '}') {
+          depth--
+          lastNonWhitespacePos = i
+        } else if (!/\s/.test(char)) {
+          lastNonWhitespacePos = i
+        }
+      } else {
+        if (!/\s/.test(char)) {
+          lastNonWhitespacePos = i
+        }
+      }
+    }
+
+    // If we have unclosed braces, try to close them
+    if (depth > 0 && depth <= 10 && lastNonWhitespacePos >= 0) {
+      // Check if we're not in the middle of a string (which would be bad)
+      // If we're not in a string and depth > 0, we can try to close
+      if (!inString) {
+        // Check if the last non-whitespace character suggests we can safely close
+        const lastChar = trimmed[lastNonWhitespacePos]
+        const canClose = lastChar === '}' || lastChar === '"' || lastChar === ']' || 
+                         (lastChar >= '0' && lastChar <= '9') || // number
+                         lastChar === 'e' || lastChar === 'E' || // scientific notation end
+                         trimmed.substring(Math.max(0, lastNonWhitespacePos - 4), lastNonWhitespacePos + 1).match(/(true|false|null)$/) ||
+                         // If we end with a comma, we can close after removing it
+                         lastChar === ','
+
+        if (canClose) {
+          // Remove any trailing commas/whitespace before adding closing braces
+          let fixed = trimmed.substring(0, lastNonWhitespacePos + 1).replace(/,\s*$/, '')
+          // Add missing closing braces
+          fixed += '}'.repeat(depth)
+          return fixed
+        }
+      }
+    }
+
+    return jsonString
   }
 
   /**
