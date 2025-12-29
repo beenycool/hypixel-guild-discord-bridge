@@ -2305,51 +2305,179 @@ async function minecraftInstanceImportAuthCache(
   errorHandler: UnexpectedErrorHandler,
   bridgeId?: string
 ): Promise<boolean> {
-  await interaction.showModal({
-    customId: 'minecraft-instance-import-auth',
-    title: 'Import Microsoft Auth Cache',
-    components: [
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.TextInput,
-            customId: 'instance-name',
-            style: TextInputStyle.Short,
-            label: 'Instance Name',
-            placeholder: 'e.g. myinstance',
-            minLength: 1,
-            maxLength: 128,
-            required: true
+  let instanceName = ''
+  let accumulatedJson = ''
+  let partNumber = 1
+  let currentInteraction: ButtonInteraction = interaction
+
+  const showImportModal = async (isFirstPart: boolean) => {
+    await currentInteraction.showModal({
+      customId: `minecraft-instance-import-auth-${Date.now()}`,
+      title: isFirstPart ? 'Import Microsoft Auth Cache' : `Import Microsoft Auth Cache (Part ${partNumber})`,
+      components: [
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.TextInput,
+              customId: 'instance-name',
+              style: TextInputStyle.Short,
+              label: 'Instance Name',
+              placeholder: 'e.g. myinstance',
+              minLength: 1,
+              maxLength: 128,
+              required: isFirstPart,
+              value: isFirstPart ? undefined : instanceName
+            }
+          ]
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.TextInput,
+              customId: 'json-content',
+              style: TextInputStyle.Paragraph,
+              label: isFirstPart
+                ? 'JSON Content (Part 1 of ?)'
+                : `JSON Content (Part ${partNumber}, continue from previous)`,
+              placeholder: isFirstPart
+                ? 'Paste JSON cache entries. If >4000 chars, you\'ll be prompted for more parts.'
+                : 'Paste the next part of your JSON. It will be appended to previous parts.',
+              minLength: 1,
+              maxLength: 4000,
+              required: true
+            }
+          ]
+        }
+      ]
+    })
+  }
+
+  // Show first modal
+  await showImportModal(true)
+
+  let modalInteraction: Awaited<ReturnType<typeof currentInteraction.awaitModalSubmit>>
+  let depth = 0
+
+  while (true) {
+    modalInteraction = await currentInteraction.awaitModalSubmit({
+      time: 300_000,
+      filter: (modalInteraction) => modalInteraction.user.id === interaction.user.id
+    })
+
+    if (partNumber === 1) {
+      instanceName = modalInteraction.fields.getTextInputValue('instance-name').trim()
+    }
+    const jsonPart = modalInteraction.fields.getTextInputValue('json-content').trim()
+    
+    // Append this part to accumulated JSON
+    accumulatedJson += jsonPart
+
+    // Check if JSON is complete by trying to parse it
+    let isComplete = false
+    try {
+      JSON.parse(accumulatedJson)
+      isComplete = true
+    } catch {
+      // Check if it looks incomplete (missing closing braces)
+      const trimmed = accumulatedJson.trim()
+      if (trimmed.startsWith('{')) {
+        depth = 0
+        let inString = false
+        let escapeNext = false
+        
+        for (let i = 0; i < trimmed.length; i++) {
+          const char = trimmed[i]
+          if (escapeNext) {
+            escapeNext = false
+            continue
           }
-        ]
-      },
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.TextInput,
-            customId: 'json-content',
-            style: TextInputStyle.Paragraph,
-            label: 'JSON Content (max 4000 chars)',
-            placeholder:
-              'Paste JSON cache entries. Format: {"token": {...}, "mca": {...}}. Split if >4000 chars.',
-            minLength: 1,
-            maxLength: 4000,
-            required: true
+          if (char === '\\') {
+            escapeNext = true
+            continue
           }
-        ]
+          if (char === '"') {
+            inString = !inString
+            continue
+          }
+          if (!inString) {
+            if (char === '{') depth++
+            else if (char === '}') depth--
+          }
+        }
+        
+        // If depth is 0, JSON might be complete (or we need to check more carefully)
+        if (depth === 0) {
+          // Try parsing one more time
+          try {
+            JSON.parse(accumulatedJson)
+            isComplete = true
+          } catch {
+            // Still incomplete, need more parts
+            isComplete = false
+          }
+        } else {
+          // Definitely incomplete, need more parts
+          isComplete = false
+        }
       }
-    ]
-  })
+    }
 
-  const modalInteraction = await interaction.awaitModalSubmit({
-    time: 300_000,
-    filter: (modalInteraction) => modalInteraction.user.id === interaction.user.id
-  })
+    if (isComplete) {
+      // JSON is complete, proceed with import
+      break
+    } else {
+      // JSON is incomplete, ask for more
+      partNumber++
+      const followUpMessage = await modalInteraction.reply({
+        embeds: [
+          {
+            title: 'Import Microsoft Auth Cache',
+            description: `Received part ${partNumber - 1}. JSON appears incomplete${depth !== 0 ? ` (missing ${Math.abs(depth)} closing brace${Math.abs(depth) > 1 ? 's' : ''})` : ''}. Please click the button below to continue with part ${partNumber}.`,
+            color: Color.Info,
+            footer: { text: DefaultCommandFooter }
+          } satisfies APIEmbed
+        ],
+        components: [
+          {
+            type: ComponentType.ActionRow,
+            components: [
+              {
+                type: ComponentType.Button,
+                customId: `continue-import-${Date.now()}-${partNumber}`,
+                label: `Continue Part ${partNumber}`,
+                style: ButtonStyle.Primary
+              }
+            ]
+          }
+        ],
+        flags: MessageFlags.Ephemeral,
+        fetchReply: true
+      })
+      
+      // Wait for button click to continue
+      try {
+        const buttonInteraction = await followUpMessage.awaitMessageComponent({
+          time: 300_000,
+          filter: (btnInteraction) => btnInteraction.user.id === interaction.user.id && btnInteraction.isButton()
+        })
 
-  const instanceName = modalInteraction.fields.getTextInputValue('instance-name').trim()
-  const jsonContent = modalInteraction.fields.getTextInputValue('json-content').trim()
+        if (buttonInteraction.isButton()) {
+          currentInteraction = buttonInteraction
+          await showImportModal(false)
+        } else {
+          return true
+        }
+      } catch {
+        // Timeout or error, return
+        return true
+      }
+    }
+  }
+
+  // Now we have complete JSON, proceed with validation and import
+  const jsonContent = accumulatedJson
 
   const EmbedTitle = 'Importing Microsoft Auth Cache'
 
