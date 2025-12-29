@@ -19,9 +19,11 @@ export const QuitProxyError = 'Proxy encountered a problem while connecting'
 export default class StateHandler extends SubInstance<MinecraftInstance, InstanceType.Minecraft, ClientSession> {
   private static readonly MaxLoginAttempts = 100
   private static readonly MaxDuration = Duration.minutes(5)
+  private static readonly ConnectionTimeout = Duration.minutes(5)
 
   private loginAttempts
   private loggedIn
+  private connectionTimeoutId: NodeJS.Timeout | undefined
 
   constructor(
     application: Application,
@@ -34,6 +36,7 @@ export default class StateHandler extends SubInstance<MinecraftInstance, Instanc
 
     this.loginAttempts = 0
     this.loggedIn = false
+    this.connectionTimeoutId = undefined
   }
 
   public resetLoginAttempts() {
@@ -41,14 +44,30 @@ export default class StateHandler extends SubInstance<MinecraftInstance, Instanc
   }
 
   override registerEvents(clientSession: ClientSession): void {
+    // Clear any existing timeout
+    this.clearConnectionTimeout()
+
+    // Start connection timeout - if we don't connect within the timeout period, force disconnect
+    this.connectionTimeoutId = setTimeout(() => {
+      if (this.clientInstance.currentStatus() === Status.Connecting && !this.loggedIn) {
+        this.logger.warn(
+          `Connection timeout after ${StateHandler.ConnectionTimeout.toSeconds()} seconds. Forcing disconnect and retry.`
+        )
+        // Force disconnect to trigger retry
+        clientSession.client.end('Connection timeout - authentication or connection took too long')
+      }
+    }, StateHandler.ConnectionTimeout.toMilliseconds())
+
     // this will only be called after the player receives spawn packet
     clientSession.client.on('login', () => {
+      this.clearConnectionTimeout()
       void this.onLogin().catch(this.errorHandler.promiseCatch('handling login event from Minecraft'))
       this.loggedIn = true
     })
 
     // this will always be called when connection closes
     clientSession.client.on('end', (reason: string) => {
+      this.clearConnectionTimeout()
       void this.onEnd(clientSession, reason).catch(this.errorHandler.promiseCatch('handling end event from Minecraft'))
       this.loggedIn = false
     })
@@ -70,13 +89,22 @@ export default class StateHandler extends SubInstance<MinecraftInstance, Instanc
     })
 
     clientSession.client.on('error', (error: Error) => {
+      this.clearConnectionTimeout()
       void this.onError(error).catch(this.errorHandler.promiseCatch('handling error event from Minecraft'))
     })
+  }
+
+  private clearConnectionTimeout(): void {
+    if (this.connectionTimeoutId !== undefined) {
+      clearTimeout(this.connectionTimeoutId)
+      this.connectionTimeoutId = undefined
+    }
   }
 
   private async onLogin(): Promise<void> {
     if (this.loggedIn) return
 
+    this.clearConnectionTimeout()
     this.logger.info('Minecraft client ready, logged in')
 
     this.loginAttempts = 0

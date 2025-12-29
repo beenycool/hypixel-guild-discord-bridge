@@ -2488,52 +2488,107 @@ async function minecraftInstanceImportAuthCache(
     })
   } catch (error: unknown) {
     errorHandler.error('validating instance name for auth cache import', error)
-    await modalInteraction.reply({
-      embeds: [
-        {
-          title: EmbedTitle,
-          description:
-            'Instance name must be a single word with no spaces or special characters besides alphanumerical letters: A-Z and a-z and 0-9 and "_"',
-          color: Color.Error,
-          footer: { text: DefaultCommandFooter }
-        } satisfies APIEmbed
-      ],
-      flags: MessageFlags.Ephemeral
-    })
+    try {
+      if (modalInteraction.replied || modalInteraction.deferred) {
+        await modalInteraction.followUp({
+          embeds: [
+            {
+              title: EmbedTitle,
+              description:
+                'Instance name must be a single word with no spaces or special characters besides alphanumerical letters: A-Z and a-z and 0-9 and "_"',
+              color: Color.Error,
+              footer: { text: DefaultCommandFooter }
+            } satisfies APIEmbed
+          ],
+          flags: MessageFlags.Ephemeral
+        })
+      } else {
+        await modalInteraction.reply({
+          embeds: [
+            {
+              title: EmbedTitle,
+              description:
+                'Instance name must be a single word with no spaces or special characters besides alphanumerical letters: A-Z and a-z and 0-9 and "_"',
+              color: Color.Error,
+              footer: { text: DefaultCommandFooter }
+            } satisfies APIEmbed
+          ],
+          flags: MessageFlags.Ephemeral
+        })
+      }
+    } catch (replyError) {
+      errorHandler.error('Failed to send validation error response', replyError)
+    }
     return true
   }
 
   // Check if instance exists
   const instance = application.core.minecraftSessions.getInstance(instanceName)
   if (!instance) {
-    await modalInteraction.reply({
-      embeds: [
-        {
-          title: EmbedTitle,
-          description: `Instance "${escapeMarkdown(instanceName)}" does not exist. Please create it first using "Instance Add".`,
-          color: Color.Error,
-          footer: { text: DefaultCommandFooter }
-        } satisfies APIEmbed
-      ],
-      flags: MessageFlags.Ephemeral
-    })
+    try {
+      if (modalInteraction.replied || modalInteraction.deferred) {
+        await modalInteraction.followUp({
+          embeds: [
+            {
+              title: EmbedTitle,
+              description: `Instance "${escapeMarkdown(instanceName)}" does not exist. Please create it first using "Instance Add".`,
+              color: Color.Error,
+              footer: { text: DefaultCommandFooter }
+            } satisfies APIEmbed
+          ],
+          flags: MessageFlags.Ephemeral
+        })
+      } else {
+        await modalInteraction.reply({
+          embeds: [
+            {
+              title: EmbedTitle,
+              description: `Instance "${escapeMarkdown(instanceName)}" does not exist. Please create it first using "Instance Add".`,
+              color: Color.Error,
+              footer: { text: DefaultCommandFooter }
+            } satisfies APIEmbed
+          ],
+          flags: MessageFlags.Ephemeral
+        })
+      }
+    } catch (replyError) {
+      errorHandler.error('Failed to send instance not found error response', replyError)
+    }
     return true
   }
 
   if (bridgeId) {
     const bridgeInstances = application.core.bridgeConfigurations.getMinecraftInstances(bridgeId)
     if (!bridgeInstances.includes(instanceName)) {
-      await modalInteraction.reply({
-        embeds: [
-          {
-            title: EmbedTitle,
-            description: `Instance "${escapeMarkdown(instanceName)}" is not associated with this bridge.`,
-            color: Color.Error,
-            footer: { text: DefaultCommandFooter }
-          } satisfies APIEmbed
-        ],
-        flags: MessageFlags.Ephemeral
-      })
+      try {
+        if (modalInteraction.replied || modalInteraction.deferred) {
+          await modalInteraction.followUp({
+            embeds: [
+              {
+                title: EmbedTitle,
+                description: `Instance "${escapeMarkdown(instanceName)}" is not associated with this bridge.`,
+                color: Color.Error,
+                footer: { text: DefaultCommandFooter }
+              } satisfies APIEmbed
+            ],
+            flags: MessageFlags.Ephemeral
+          })
+        } else {
+          await modalInteraction.reply({
+            embeds: [
+              {
+                title: EmbedTitle,
+                description: `Instance "${escapeMarkdown(instanceName)}" is not associated with this bridge.`,
+                color: Color.Error,
+                footer: { text: DefaultCommandFooter }
+              } satisfies APIEmbed
+            ],
+            flags: MessageFlags.Ephemeral
+          })
+        }
+      } catch (replyError) {
+        errorHandler.error('Failed to send bridge association error response', replyError)
+      }
       return true
     }
   }
@@ -2564,10 +2619,52 @@ async function minecraftInstanceImportAuthCache(
     embed.color = Color.Info
   }
 
-  await modalInteraction.reply({
-    embeds: [embed],
-    flags: MessageFlags.Ephemeral
-  })
+  try {
+    // Check if interaction was already replied to (e.g., during multi-part import)
+    if (modalInteraction.replied || modalInteraction.deferred) {
+      await modalInteraction.followUp({
+        embeds: [embed],
+        flags: MessageFlags.Ephemeral
+      })
+    } else {
+      await modalInteraction.reply({
+        embeds: [embed],
+        flags: MessageFlags.Ephemeral
+      })
+    }
+  } catch (error) {
+    // If reply fails, try followUp as fallback
+    try {
+      await modalInteraction.followUp({
+        embeds: [embed],
+        flags: MessageFlags.Ephemeral
+      })
+    } catch (followUpError) {
+      // Log the error so it's visible in logs
+      errorHandler.error('Failed to send import result response', followUpError)
+      // Try to send a simple error message
+      try {
+        if (!modalInteraction.replied && !modalInteraction.deferred) {
+          await modalInteraction.reply({
+            content: `Import completed: ${result.imported.length} imported, ${result.errors.length} errors. Check logs for details.`,
+            flags: MessageFlags.Ephemeral
+          })
+        } else {
+          await modalInteraction.followUp({
+            content: `Import completed: ${result.imported.length} imported, ${result.errors.length} errors. Check logs for details.`,
+            flags: MessageFlags.Ephemeral
+          })
+        }
+      } catch {
+        // Last resort: use error handler to log
+        errorHandler.error('Failed to send any import result feedback to user', {
+          imported: result.imported,
+          errors: result.errors,
+          instanceName
+        })
+      }
+    }
+  }
 
   return true
 }
