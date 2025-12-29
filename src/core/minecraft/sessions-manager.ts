@@ -337,19 +337,52 @@ export class SessionsManager {
       // If we didn't find a matching closing brace, try to continue with next object
       if (!foundEnd) {
         if (depth !== 0) {
-          // Try to extract a partial object for better error reporting
-          const partial = trimmed.substring(startPos, Math.min(startPos + 100, trimmed.length))
+          // Try to extract more context for better error reporting
+          const endPos = Math.min(startPos + 200, trimmed.length)
+          const partial = trimmed.substring(startPos, endPos)
+          const objectPreview = partial.substring(0, 100)
+          
+          // Try to identify which cache entry this is
+          const cacheNameMatch = partial.match(/"([^"]+)":\s*\{/)
+          const cacheName = cacheNameMatch ? cacheNameMatch[1] : 'unknown'
+          
+          // Check if we're near the end of the string (likely truncated)
+          const isNearEnd = position >= trimmed.length - 100
+          const truncationWarning = isNearEnd
+            ? ' The JSON appears to be truncated (likely due to Discord\'s 4000 character limit). Consider splitting your cache entries into multiple imports.'
+            : ''
+          
           errors.push(
-            `Unclosed JSON object starting at position ${startPos} (depth: ${depth}). Partial content: "${partial}${partial.length < 100 ? '' : '...'}"`
+            `Unclosed JSON object "${cacheName}" starting at position ${startPos} (missing ${depth} closing brace${depth > 1 ? 's' : ''}).${truncationWarning} ` +
+            `Partial content: "${objectPreview}${objectPreview.length < 100 ? '' : '...'}"`
           )
           
-          // Try to find the next '{' to continue parsing other objects
-          const nextBrace = trimmed.indexOf('{', position)
-          if (nextBrace === -1 || nextBrace === position) {
-            // No more objects to parse
-            break
+          // If we're at the end of the string and depth is reasonable, try to heal by closing braces
+          if (isNearEnd && depth > 0 && depth <= 10) {
+            const healedJson = trimmed.substring(startPos) + '}'.repeat(depth)
+            try {
+              const parsed = JSON.parse(healedJson) as Record<string, unknown>
+              Object.assign(merged, parsed)
+              objectCount++
+              // Replace the error with a warning about truncation
+              errors.pop()
+              errors.push(
+                `Recovered partial data for "${cacheName}" by closing ${depth} missing brace${depth > 1 ? 's' : ''}. ` +
+                `Data may be incomplete due to truncation.`
+              )
+              break // We've reached the end
+            } catch {
+              // Healing failed, keep the original error
+            }
+          } else {
+            // Try to find the next '{' to continue parsing other objects
+            const nextBrace = trimmed.indexOf('{', position + 1)
+            if (nextBrace === -1 || nextBrace === position) {
+              // No more objects to parse
+              break
+            }
+            position = nextBrace
           }
-          position = nextBrace
         } else {
           // Should not happen, but break to avoid infinite loop
           break
