@@ -2333,7 +2333,7 @@ async function minecraftInstanceImportAuthCache(
             style: TextInputStyle.Paragraph,
             label: 'JSON Content (max 4000 chars)',
             placeholder:
-              'Paste JSON cache entries. Format: {"token": {...}, "mca": {...}} or multiple objects: {"token":{...}}{"mca":{...}}. If your data exceeds 4000 characters, split into multiple imports.',
+              'Paste JSON cache entries. Format: {"token": {...}, "mca": {...}}. Split if >4000 chars.',
             minLength: 1,
             maxLength: 4000,
             required: true
