@@ -189,6 +189,13 @@ export class SessionsManager {
         try {
           parsedData = JSON.parse(jsonData) as Record<string, unknown>
         } catch (parseError) {
+          const trimmed = jsonData.trim()
+          // Check if this looks like a single object (has top-level comma-separated keys)
+          // Pattern: starts with {, contains ","key": patterns which indicate multiple top-level keys
+          const hasTopLevelCommas = trimmed.startsWith('{') && trimmed.match(/,"[^"]+":/g)
+          const hasConcatenatedObjects = trimmed.match(/\}\s*\{/g)
+          const isSingleObject = hasTopLevelCommas !== null && (hasConcatenatedObjects === null || hasTopLevelCommas.length > hasConcatenatedObjects.length)
+          
           // If that fails, try to fix common issues and parse again
           let fixedParsed: Record<string, unknown> | undefined
           const fixedJson = this.tryFixJson(jsonData)
@@ -202,29 +209,59 @@ export class SessionsManager {
           }
           
           // If single object parsing still failed, try more aggressive fixing
-          if (!fixedParsed) {
-            const trimmed = jsonData.trim()
-            if (trimmed.startsWith('{')) {
-              // Try aggressive fixing for single object
-              const moreFixedJson = this.tryFixJsonAggressive(trimmed)
-              if (moreFixedJson !== trimmed) {
-                try {
-                  fixedParsed = JSON.parse(moreFixedJson) as Record<string, unknown>
-                  errors.push('Fixed JSON formatting issues (added missing closing braces)')
-                } catch {
-                  // Still failed, will try concatenated parser below
-                }
+          if (!fixedParsed && (isSingleObject || trimmed.startsWith('{'))) {
+            // Try aggressive fixing for single object
+            const moreFixedJson = this.tryFixJsonAggressive(trimmed)
+            if (moreFixedJson !== trimmed) {
+              try {
+                fixedParsed = JSON.parse(moreFixedJson) as Record<string, unknown>
+                errors.push('Fixed JSON formatting issues (added missing closing braces)')
+              } catch {
+                // Still failed, will try concatenated parser below
               }
             }
           }
           
-          // If single object parsing still failed, try concatenated JSON objects
+          // If single object parsing still failed, only try concatenated JSON objects
+          // if it doesn't look like a single object (has multiple complete objects)
           if (fixedParsed) {
             parsedData = fixedParsed
-          } else {
+          } else if (!isSingleObject && hasConcatenatedObjects) {
+            // Only use concatenated parser if it looks like multiple objects
             parsedData = this.parseConcatenatedJsonObjects(jsonData, errors)
             if (Object.keys(parsedData).length === 0) {
               // If we couldn't parse anything, return early
+              return { imported, errors }
+            }
+          } else {
+            // It looks like a single object but we couldn't parse it
+            // Try one more normalization attempt: remove any BOM or zero-width characters
+            if (isSingleObject) {
+              const normalized = trimmed
+                .replace(/^\uFEFF/, '') // Remove BOM
+                .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+                .trim()
+              
+              if (normalized !== trimmed) {
+                try {
+                  parsedData = JSON.parse(normalized) as Record<string, unknown>
+                  errors.push('Fixed JSON formatting issues (removed invisible characters)')
+                } catch {
+                  // Still failed, report the original error
+                  const parseErrorMessage = parseError instanceof Error ? parseError.message : String(parseError)
+                  errors.push(`Failed to parse JSON: ${parseErrorMessage}`)
+                  return { imported, errors }
+                }
+              } else {
+                // Report the original error
+                const parseErrorMessage = parseError instanceof Error ? parseError.message : String(parseError)
+                errors.push(`Failed to parse JSON: ${parseErrorMessage}`)
+                return { imported, errors }
+              }
+            } else {
+              // Report the original error
+              const parseErrorMessage = parseError instanceof Error ? parseError.message : String(parseError)
+              errors.push(`Failed to parse JSON: ${parseErrorMessage}`)
               return { imported, errors }
             }
           }
