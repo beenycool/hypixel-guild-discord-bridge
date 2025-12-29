@@ -166,6 +166,7 @@ export class SessionsManager {
    * Import Microsoft authentication cache from JSON data.
    * The JSON should be an object where keys are cache names (e.g., "token", "mca", "userToken", etc.)
    * and values are the cache data objects.
+   * Also supports multiple JSON objects concatenated together (e.g., {"token":{...}}{"mca":{...}}).
    *
    * @param instanceName The Minecraft instance name
    * @param username The username for the session (typically the instance name)
@@ -181,9 +182,23 @@ export class SessionsManager {
     const errors: string[] = []
 
     try {
-      // Parse JSON if it's a string
-      const parsedData =
-        typeof jsonData === 'string' ? (JSON.parse(jsonData) as Record<string, unknown>) : jsonData
+      let parsedData: Record<string, unknown>
+
+      if (typeof jsonData === 'string') {
+        // First, try parsing as a single JSON object
+        try {
+          parsedData = JSON.parse(jsonData) as Record<string, unknown>
+        } catch (parseError) {
+          // If that fails, try to handle multiple concatenated JSON objects
+          parsedData = this.parseConcatenatedJsonObjects(jsonData, errors)
+          if (Object.keys(parsedData).length === 0) {
+            // If we couldn't parse anything, return early
+            return { imported, errors }
+          }
+        }
+      } else {
+        parsedData = jsonData
+      }
 
       if (typeof parsedData !== 'object' || parsedData === null || Array.isArray(parsedData)) {
         errors.push('Invalid JSON format: expected an object with cache entries')
@@ -220,6 +235,95 @@ export class SessionsManager {
     }
 
     return { imported, errors }
+  }
+
+  /**
+   * Parse multiple concatenated JSON objects from a string.
+   * Handles cases where multiple JSON objects are concatenated without separators (e.g., {"a":1}{"b":2}).
+   *
+   * @param jsonString The string containing concatenated JSON objects
+   * @param errors Array to append any parsing errors to
+   * @returns Merged object containing all parsed cache entries
+   */
+  private parseConcatenatedJsonObjects(
+    jsonString: string,
+    errors: string[]
+  ): Record<string, unknown> {
+    const merged: Record<string, unknown> = {}
+    let position = 0
+    const trimmed = jsonString.trim()
+
+    while (position < trimmed.length) {
+      // Skip whitespace
+      while (position < trimmed.length && /\s/.test(trimmed[position])) {
+        position++
+      }
+
+      if (position >= trimmed.length) {
+        break
+      }
+
+      // Find the start of a JSON object
+      if (trimmed[position] !== '{') {
+        errors.push(`Unexpected character at position ${position}: expected '{'`)
+        break
+      }
+
+      // Find the matching closing brace by tracking brace depth
+      let depth = 0
+      let startPos = position
+      let inString = false
+      let escapeNext = false
+
+      for (let i = position; i < trimmed.length; i++) {
+        const char = trimmed[i]
+
+        if (escapeNext) {
+          escapeNext = false
+          continue
+        }
+
+        if (char === '\\') {
+          escapeNext = true
+          continue
+        }
+
+        if (char === '"') {
+          inString = !inString
+          continue
+        }
+
+        if (!inString) {
+          if (char === '{') {
+            depth++
+          } else if (char === '}') {
+            depth--
+            if (depth === 0) {
+              // Found the end of this JSON object
+              const jsonObjectStr = trimmed.substring(startPos, i + 1)
+              try {
+                const parsed = JSON.parse(jsonObjectStr) as Record<string, unknown>
+                // Merge into the result object
+                Object.assign(merged, parsed)
+              } catch (parseError) {
+                const errorMessage = parseError instanceof Error ? parseError.message : String(parseError)
+                errors.push(`Failed to parse JSON object at position ${startPos}: ${errorMessage}`)
+              }
+              position = i + 1
+              break
+            }
+          }
+        }
+      }
+
+      // If we didn't find a matching closing brace, break
+      if (depth !== 0) {
+        errors.push(`Unclosed JSON object starting at position ${startPos}`)
+        break
+      }
+    }
+
+    return merged
   }
 }
 
