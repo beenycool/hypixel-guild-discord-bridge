@@ -1,6 +1,6 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
-import { getUuidIfExists, playerNeverPlayedHypixel, shortenNumber, usernameNotExists } from '../common/utility'
+import { calculateDuelsDivision, getUuidIfExists, playerNeverPlayedHypixel, shortenNumber, usernameNotExists } from '../common/utility'
 
 type DuelType =
   | 'blitz'
@@ -96,11 +96,11 @@ export default class Duels extends ChatCommandHandler {
 
     if (!duelType) {
       // Overall stats
-      const division = (stats as unknown as { division?: string }).division ?? 'Unknown'
       const wins = stats.wins
       const winstreak = stats.winstreak
       const bestWinstreak = stats.bestWinstreak
       const wlRatio = stats.WLRatio
+      const division = calculateDuelsDivision(wins, true)
 
       return (
         `[Duels] [${this.formatDivision(division)}] ${givenUsername} ` +
@@ -122,11 +122,11 @@ export default class Duels extends ChatCommandHandler {
     >
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive for dynamic data
-    const division = (dataObject.division as string) ?? 'Unknown'
     const wins = dataObject.wins as number
     const winstreak = dataObject.winstreak as number
     const bestWinstreak = dataObject.bestWinstreak as number
     const wlRatio = dataObject.WLRatio as number
+    const division = calculateDuelsDivision(wins, false)
 
     return (
       `[${Duels.DuelDisplayNames[duelType]}] [${this.formatDivision(division)}] ${givenUsername} ` +

@@ -152,3 +152,122 @@ export function playerNeverPlayedSlayers(username: string): string {
 export function playerNeverEnteredCrimson(username: string): string {
   return `${username} has never entered Crimson Isle before?`
 }
+
+interface DivisionThreshold {
+  tier: string
+  maxLevel: number
+  increment: number
+}
+
+const DuelsDivisionThresholds: readonly DivisionThreshold[] = [
+  { tier: 'Rookie', maxLevel: 5, increment: 10 },
+  { tier: 'Iron', maxLevel: 5, increment: 30 },
+  { tier: 'Gold', maxLevel: 5, increment: 50 },
+  { tier: 'Diamond', maxLevel: 5, increment: 100 },
+  { tier: 'Master', maxLevel: 5, increment: 200 },
+  { tier: 'Legend', maxLevel: 5, increment: 600 },
+  { tier: 'Grandmaster', maxLevel: 5, increment: 1000 },
+  { tier: 'Godlike', maxLevel: 5, increment: 3000 },
+  { tier: 'Celestial', maxLevel: 5, increment: 5000 },
+  { tier: 'Divine', maxLevel: 5, increment: 10000 },
+  { tier: 'Ascended', maxLevel: 50, increment: 10000 }
+] as const
+
+const DivisionStartWins: readonly number[] = [
+  50, // Rookie I
+  100, // Iron I
+  250, // Gold I
+  500, // Diamond I
+  1000, // Master I
+  2000, // Legend I
+  5000, // Grandmaster I
+  10000, // Godlike I
+  25000, // Celestial I
+  50000, // Divine I
+  100000 // Ascended I
+] as const
+
+function romanNumeral(num: number): string {
+  const numerals: Record<number, string> = {
+    1: 'I',
+    2: 'II',
+    3: 'III',
+    4: 'IV',
+    5: 'V',
+    6: 'VI',
+    7: 'VII',
+    8: 'VIII',
+    9: 'IX',
+    10: 'X',
+    11: 'XI',
+    12: 'XII',
+    13: 'XIII',
+    14: 'XIV',
+    15: 'XV',
+    16: 'XVI',
+    17: 'XVII',
+    18: 'XVIII',
+    19: 'XIX',
+    20: 'XX',
+    21: 'XXI',
+    22: 'XXII',
+    23: 'XXIII',
+    24: 'XXIV',
+    25: 'XXV',
+    26: 'XXVI',
+    27: 'XXVII',
+    28: 'XXVIII',
+    29: 'XXIX',
+    30: 'XXX',
+    31: 'XXXI',
+    32: 'XXXII',
+    33: 'XXXIII',
+    34: 'XXXIV',
+    35: 'XXXV',
+    36: 'XXXVI',
+    37: 'XXXVII',
+    38: 'XXXVIII',
+    39: 'XXXIX',
+    40: 'XL',
+    41: 'XLI',
+    42: 'XLII',
+    43: 'XLIII',
+    44: 'XLIV',
+    45: 'XLV',
+    46: 'XLVI',
+    47: 'XLVII',
+    48: 'XLVIII',
+    49: 'XLIX',
+    50: 'L'
+  }
+  return numerals[num] ?? num.toString()
+}
+
+export function calculateDuelsDivision(wins: number, isOverall: boolean): string {
+  let effectiveWins = wins
+
+  // For overall stats, divide by 2 to match individual thresholds
+  if (isOverall) {
+    effectiveWins = Math.floor(wins / 2)
+  }
+
+  // Find the appropriate tier
+  for (let tierIndex = 0; tierIndex < DuelsDivisionThresholds.length; tierIndex++) {
+    const threshold = DuelsDivisionThresholds[tierIndex]
+    const startWins = DivisionStartWins[tierIndex]
+    const maxIndex = DuelsDivisionThresholds.length - 1
+
+    // If this is the last tier or wins are below the next tier's start
+    const nextTierStart = tierIndex < maxIndex ? DivisionStartWins[tierIndex + 1] : Infinity
+
+    if (effectiveWins >= startWins && effectiveWins < nextTierStart) {
+      const levelWins = effectiveWins - startWins
+      const levelNumber = Math.floor(levelWins / threshold.increment)
+      const actualLevel = Math.min(levelNumber + 1, threshold.maxLevel)
+      return `${threshold.tier} ${romanNumeral(actualLevel)}`
+    }
+  }
+
+  // Player has wins below Rookie I (50 for individual, 100 for overall)
+  return 'Unranked'
+}
