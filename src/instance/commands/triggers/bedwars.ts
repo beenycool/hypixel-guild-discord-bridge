@@ -2,6 +2,7 @@ import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
 import {
   capitalize,
+  formatStatNumber,
   getUuidIfExists,
   playerNeverPlayedHypixel,
   shortenNumber,
@@ -63,9 +64,9 @@ export default class Bedwars extends ChatCommandHandler {
 
     return (
       `[${level.toFixed(0)}✫] ${givenUsername} ${modePrefix}` +
-      `FK: ${shortenNumber(finalKills)} FKDR: ${finalKDRatio.toFixed(2)} ` +
-      `W: ${shortenNumber(wins)} WLR: ${wlRatio.toFixed(2)} ` +
-      `BB: ${shortenNumber(bedsBroken)} BLR: ${blRatio.toFixed(2)} ` +
+      `FK: ${shortenNumber(finalKills)} FKDR: ${formatStatNumber(finalKDRatio)} ` +
+      `W: ${shortenNumber(wins)} WLR: ${formatStatNumber(wlRatio)} ` +
+      `BB: ${shortenNumber(bedsBroken)} BLR: ${formatStatNumber(blRatio)} ` +
       `WS: ${winstreak}`
     )
   }

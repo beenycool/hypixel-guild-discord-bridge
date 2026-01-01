@@ -1,7 +1,7 @@
 import type { Logger } from 'log4js'
 
 import type Application from '../../../application.js'
-import type { InstanceType } from '../../../common/application-event.js'
+import type { InstanceStatus, InstanceType } from '../../../common/application-event.js'
 import { InstanceMessageType } from '../../../common/application-event.js'
 import { Status } from '../../../common/connectable-instance.js'
 import type EventHelper from '../../../common/event-helper.js'
@@ -24,6 +24,8 @@ export default class StateHandler extends SubInstance<MinecraftInstance, Instanc
   private loginAttempts
   private loggedIn
   private connectionTimeoutId: NodeJS.Timeout | undefined
+  private authenticationCodeRequested: boolean
+  private instanceStatusListener: ((event: InstanceStatus) => void) | undefined
 
   constructor(
     application: Application,
@@ -37,6 +39,7 @@ export default class StateHandler extends SubInstance<MinecraftInstance, Instanc
     this.loginAttempts = 0
     this.loggedIn = false
     this.connectionTimeoutId = undefined
+    this.authenticationCodeRequested = false
   }
 
   public resetLoginAttempts() {
@@ -44,15 +47,32 @@ export default class StateHandler extends SubInstance<MinecraftInstance, Instanc
   }
 
   override registerEvents(clientSession: ClientSession): void {
-    // Clear any existing timeout
+    // Clear any existing timeout and reset auth code tracking
     this.clearConnectionTimeout()
+    this.authenticationCodeRequested = false
+
+    // Listen for authentication code requests
+    this.instanceStatusListener = (event: InstanceStatus) => {
+      if (
+        event.instanceName === this.clientInstance.instanceName &&
+        event.message?.type === InstanceMessageType.MinecraftAuthenticationCode
+      ) {
+        this.authenticationCodeRequested = true
+      }
+    }
+    this.application.on('instanceStatus', this.instanceStatusListener)
 
     // Start connection timeout - if we don't connect within the timeout period, force disconnect
     this.connectionTimeoutId = setTimeout(() => {
+      // Remove the listener when timeout fires
+      this.clearInstanceStatusListener()
+
       if (this.clientInstance.currentStatus() === Status.Connecting && !this.loggedIn) {
-        this.logger.warn(
-          `Connection timeout after ${StateHandler.ConnectionTimeout.toSeconds()} seconds. Forcing disconnect and retry.`
-        )
+        const timeoutMessage = this.authenticationCodeRequested
+          ? `Authentication timeout after ${StateHandler.ConnectionTimeout.toSeconds()} seconds. The Microsoft authentication code may have expired or was not completed. Forcing disconnect to retry with a new code.`
+          : `Connection timeout after ${StateHandler.ConnectionTimeout.toSeconds()} seconds. Forcing disconnect and retry.`
+
+        this.logger.warn(timeoutMessage)
         // Force disconnect to trigger retry
         clientSession.client.end('Connection timeout - authentication or connection took too long')
       }
@@ -98,6 +118,14 @@ export default class StateHandler extends SubInstance<MinecraftInstance, Instanc
     if (this.connectionTimeoutId !== undefined) {
       clearTimeout(this.connectionTimeoutId)
       this.connectionTimeoutId = undefined
+    }
+    this.clearInstanceStatusListener()
+  }
+
+  private clearInstanceStatusListener(): void {
+    if (this.instanceStatusListener !== undefined) {
+      this.application.off('instanceStatus', this.instanceStatusListener)
+      this.instanceStatusListener = undefined
     }
   }
 

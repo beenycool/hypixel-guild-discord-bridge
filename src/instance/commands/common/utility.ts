@@ -116,6 +116,11 @@ export function shortenNumber(value: number): string {
   return value.toFixed(Math.max(0, digitsCount - digits)) + suffix
 }
 
+export function formatStatNumber(value: number): string {
+  if (!Number.isFinite(value)) return '0'
+  return value.toString()
+}
+
 export function capitalize(name: string): string {
   return name.slice(0, 1).toUpperCase() + name.slice(1).toLowerCase()
 }

@@ -1,6 +1,7 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
 import {
+  formatStatNumber,
   getSelectedSkyblockProfileData,
   getUuidIfExists,
   playerNeverPlayedSkyblock,
@@ -32,6 +33,6 @@ export default class FairySouls extends ChatCommandHandler {
     const collected = fairySouls.total_collected ?? 0
     const progress = total > 0 ? (collected / total) * 100 : 0
 
-    return `${givenUsername}'s Fairy Souls: ${collected} / ${total} | Progress: ${progress.toFixed(2)}%`
+    return `${givenUsername}'s Fairy Souls: ${collected} / ${total} | Progress: ${formatStatNumber(progress)}%`
   }
 }

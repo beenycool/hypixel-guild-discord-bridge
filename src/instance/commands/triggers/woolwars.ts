@@ -1,6 +1,12 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
-import { getUuidIfExists, playerNeverPlayedHypixel, shortenNumber, usernameNotExists } from '../common/utility'
+import {
+  formatStatNumber,
+  getUuidIfExists,
+  playerNeverPlayedHypixel,
+  shortenNumber,
+  usernameNotExists
+} from '../common/utility'
 
 export default class Woolwars extends ChatCommandHandler {
   constructor() {
@@ -43,9 +49,9 @@ export default class Woolwars extends ChatCommandHandler {
 
     return (
       `[${Math.floor(level)}✫] ${givenUsername}: ` +
-      `W: ${shortenNumber(roundWins)} | WLR: ${wlr.toFixed(2)} | KDR: ${kdRatio.toFixed(2)} | ` +
+      `W: ${shortenNumber(roundWins)} | WLR: ${formatStatNumber(wlr)} | KDR: ${formatStatNumber(kdRatio)} | ` +
       `BB: ${shortenNumber(blocksBroken)} | WP: ${shortenNumber(woolsPlaced)} | ` +
-      `WPP: ${wpp.toFixed(2)} | WPG: ${wpg.toFixed(2)}`
+      `WPP: ${formatStatNumber(wpp)} | WPG: ${formatStatNumber(wpg)}`
     )
   }
 }

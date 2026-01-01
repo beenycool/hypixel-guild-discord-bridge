@@ -1,6 +1,6 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
-import { getUuidIfExists, playerNeverPlayedHypixel, usernameNotExists } from '../common/utility'
+import { formatStatNumber, getUuidIfExists, playerNeverPlayedHypixel, usernameNotExists } from '../common/utility'
 
 export default class Uhc extends ChatCommandHandler {
   constructor() {
@@ -28,6 +28,6 @@ export default class Uhc extends ChatCommandHandler {
     const wins = stats.wins
     const headsEaten = stats.headsEaten
 
-    return `[${starLevel}✫] ${givenUsername} | KDR: ${kdRatio.toFixed(2)} | W: ${wins} | Heads: ${headsEaten}`
+    return `[${starLevel}✫] ${givenUsername} | KDR: ${formatStatNumber(kdRatio)} | W: ${wins} | Heads: ${headsEaten}`
   }
 }

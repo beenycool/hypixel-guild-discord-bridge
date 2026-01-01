@@ -1,6 +1,12 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
-import { getUuidIfExists, playerNeverPlayedHypixel, shortenNumber, usernameNotExists } from '../common/utility'
+import {
+  formatStatNumber,
+  getUuidIfExists,
+  playerNeverPlayedHypixel,
+  shortenNumber,
+  usernameNotExists
+} from '../common/utility'
 
 export default class Pit extends ChatCommandHandler {
   constructor() {
@@ -31,7 +37,7 @@ export default class Pit extends ChatCommandHandler {
     return (
       `${givenUsername}'s Pit: ` +
       `Kills: ${shortenNumber(kills)} | Deaths: ${shortenNumber(deaths)} | ` +
-      `KDR: ${kdr.toFixed(2)} | Playtime: ${Math.floor(playtime / 60)}h`
+      `KDR: ${formatStatNumber(kdr)} | Playtime: ${Math.floor(playtime / 60)}h`
     )
   }
 }

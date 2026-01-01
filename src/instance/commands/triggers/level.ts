@@ -2,7 +2,7 @@ import assert from 'node:assert'
 
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
-import { getUuidIfExists, playerNeverPlayedSkyblock, usernameNotExists } from '../common/utility'
+import { formatStatNumber, getUuidIfExists, playerNeverPlayedSkyblock, usernameNotExists } from '../common/utility'
 
 export default class Level extends ChatCommandHandler {
   constructor() {
@@ -29,7 +29,7 @@ export default class Level extends ChatCommandHandler {
     assert.ok(selected)
 
     const exp = selected.leveling?.experience ?? 0
-    const level = (exp / 100).toFixed(2)
+    const level = exp / 100
     let result = `${givenUsername}'s `
     switch (profile.game_mode) {
       case 'ironman': {
@@ -48,7 +48,7 @@ export default class Level extends ChatCommandHandler {
         result += 'skyblock profile is level '
       }
     }
-    result += level
+    result += formatStatNumber(level)
 
     return result
   }

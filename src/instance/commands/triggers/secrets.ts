@@ -1,6 +1,7 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
 import {
+  formatStatNumber,
   getSelectedSkyblockProfileRaw,
   getUuidIfExists,
   playerNeverPlayedDungeons,
@@ -35,9 +36,11 @@ export default class Secrets extends ChatCommandHandler {
     const totalRuns = this.getTotalRuns(catacombRuns) + this.getTotalRuns(mastermodeRuns)
 
     const secrets = hypixelProfile.achievements.skyblockTreasureHunter as number
-    const averageSecrets = (secrets / totalRuns).toFixed(2)
+    const averageSecrets = secrets / totalRuns
 
-    return `${givenUsername}'s secrets: ${secrets.toLocaleString() || 0} Total ${averageSecrets} Average`
+    return `${givenUsername}'s secrets: ${secrets.toLocaleString() || 0} Total ${formatStatNumber(
+      averageSecrets
+    )} Average`
   }
 
   private getTotalRuns(runs: Record<string, number | undefined> | undefined): number {

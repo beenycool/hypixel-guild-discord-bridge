@@ -1,6 +1,12 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
-import { getUuidIfExists, playerNeverPlayedHypixel, shortenNumber, usernameNotExists } from '../common/utility'
+import {
+  formatStatNumber,
+  getUuidIfExists,
+  playerNeverPlayedHypixel,
+  shortenNumber,
+  usernameNotExists
+} from '../common/utility'
 
 export default class Megawalls extends ChatCommandHandler {
   constructor() {
@@ -34,9 +40,9 @@ export default class Megawalls extends ChatCommandHandler {
 
     return (
       `${givenUsername}'s Megawalls: Class: ${selectedClass} | ` +
-      `FK: ${shortenNumber(finalKills)} FKDR: ${finalKDRatio.toFixed(2)} | ` +
-      `W: ${shortenNumber(wins)} WLR: ${wlRatio.toFixed(2)} | ` +
-      `K: ${shortenNumber(kills)} KDR: ${kdRatio.toFixed(2)} | A: ${shortenNumber(assists)}`
+      `FK: ${shortenNumber(finalKills)} FKDR: ${formatStatNumber(finalKDRatio)} | ` +
+      `W: ${shortenNumber(wins)} WLR: ${formatStatNumber(wlRatio)} | ` +
+      `K: ${shortenNumber(kills)} KDR: ${formatStatNumber(kdRatio)} | A: ${shortenNumber(assists)}`
     )
   }
 }

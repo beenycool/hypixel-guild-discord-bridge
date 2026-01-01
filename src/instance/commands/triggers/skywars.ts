@@ -1,6 +1,12 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
-import { getUuidIfExists, playerNeverPlayedHypixel, shortenNumber, usernameNotExists } from '../common/utility'
+import {
+  formatStatNumber,
+  getUuidIfExists,
+  playerNeverPlayedHypixel,
+  shortenNumber,
+  usernameNotExists
+} from '../common/utility'
 
 export default class Skywars extends ChatCommandHandler {
   private static readonly PRESTIGE_SCHEMES = [
@@ -105,8 +111,8 @@ export default class Skywars extends ChatCommandHandler {
 
     return (
       `[${prestige} ${level.toFixed(0)}${emblem}] ${givenUsername} ` +
-      `Kills: ${shortenNumber(kills)} KDR: ${kdRatio.toFixed(2)} | ` +
-      `Wins: ${shortenNumber(wins)} WLR: ${wlRatio.toFixed(2)} | ` +
+      `Kills: ${shortenNumber(kills)} KDR: ${formatStatNumber(kdRatio)} | ` +
+      `Wins: ${shortenNumber(wins)} WLR: ${formatStatNumber(wlRatio)} | ` +
       `Coins: ${shortenNumber(coins)}`
     )
   }

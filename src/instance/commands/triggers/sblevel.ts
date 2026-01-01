@@ -1,6 +1,7 @@
 import type { ChatCommandContext } from '../../../common/commands.js'
 import { ChatCommandHandler } from '../../../common/commands.js'
 import {
+  formatStatNumber,
   getSelectedSkyblockProfileRaw,
   getUuidIfExists,
   playerNeverPlayedSkyblock,
@@ -28,6 +29,6 @@ export default class Sblevel extends ChatCommandHandler {
     const experience = selectedProfile.leveling?.experience ?? 0
     const level = experience > 0 ? experience / 100 : 0
 
-    return `${givenUsername}'s Skyblock Level: ${level.toFixed(2)}`
+    return `${givenUsername}'s Skyblock Level: ${formatStatNumber(level)}`
   }
 }
